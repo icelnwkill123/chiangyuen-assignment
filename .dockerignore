@@ -1,0 +1,6 @@
+bin/
+server.log
+test_system.rb
+students_source.xlsx
+scratch_excel/
+.git/
