@@ -1070,7 +1070,7 @@ function filterStudentAssignments() {
   });
 }
 
-function openSubmitModal(assignmentId, prefillSid = '', prefillCls = '', prefillName = '') {
+function openSubmitModal(assignmentId, prefillSid = '', prefillCls = '', prefillName = '', prefillNum = '') {
   const assign = allAssignments.find(a => a.id === assignmentId);
   if (!assign) return;
 
@@ -1089,24 +1089,65 @@ function openSubmitModal(assignmentId, prefillSid = '', prefillCls = '', prefill
   document.getElementById('submitWorkForm').reset();
   removeSelectedFile();
 
+  const hint = document.getElementById('autoNameHint');
+  if (hint) {
+    hint.textContent = 'ระบบจะดึงชื่อ-สกุลให้อัตโนมัติเมื่อเลือกห้องและเลขที่';
+    hint.style.color = '#059669';
+  }
+
+  if (prefillCls) {
+    const clsSelect = document.getElementById('studentClassroom');
+    if (clsSelect) clsSelect.value = prefillCls;
+  }
+  if (prefillNum) {
+    const numInput = document.getElementById('studentNumber');
+    if (numInput) numInput.value = prefillNum;
+  }
   if (prefillSid) {
-    document.getElementById('studentId').value = prefillSid;
+    const sidInput = document.getElementById('studentId');
+    if (sidInput) sidInput.value = prefillSid;
   }
   if (prefillName) {
-    document.getElementById('studentName').value = prefillName;
+    const nameInput = document.getElementById('studentName');
+    if (nameInput) nameInput.value = prefillName;
   }
-  if (prefillCls) {
-    document.getElementById('studentClassroom').value = prefillCls;
-  } else if (prefillSid) {
-    handleStudentIdBlur(prefillSid);
+
+  if (prefillCls && prefillNum) {
+    onClassroomOrNumberChange();
   }
 
   openModal('submitWorkModal');
 }
 
-// Auto fill student name if known in roster
+// Auto fill student name when classroom or number changes
+function onClassroomOrNumberChange() {
+  const cls = (document.getElementById('studentClassroom')?.value || '').trim();
+  const num = parseInt(document.getElementById('studentNumber')?.value || '0', 10);
+  const nameInput = document.getElementById('studentName');
+  const idInput = document.getElementById('studentId');
+  const hint = document.getElementById('autoNameHint');
+
+  if (!cls || num <= 0 || !allStudents || allStudents.length === 0) return;
+
+  const found = allStudents.find(s => s.classroom === cls && parseInt(s.student_number, 10) === num);
+  if (found) {
+    if (nameInput) nameInput.value = found.name;
+    if (idInput) idInput.value = found.student_id;
+    if (hint) {
+      hint.textContent = `✅ พบข้อมูล: ${found.name} (รหัสประจำตัว: ${found.student_id})`;
+      hint.style.color = '#059669';
+    }
+  } else {
+    if (hint) {
+      hint.textContent = `ℹ️ ไม่พบเลขที่ ${num} ในห้อง ${cls} (สามารถพิมพ์ชื่อ-สกุลได้เอง)`;
+      hint.style.color = '#d97706';
+    }
+  }
+}
+
+// Auto fill student name if known in roster (backward compatibility)
 function handleStudentIdBlur(studentId) {
-  const trimmed = studentId.trim();
+  const trimmed = (studentId || '').trim();
   if (!trimmed || allStudents.length === 0) return;
 
   const found = allStudents.find(s => s.student_id === trimmed);
@@ -1116,9 +1157,11 @@ function handleStudentIdBlur(studentId) {
       nameInput.value = found.name;
     }
     const clsSelect = document.getElementById('studentClassroom');
-    if (clsSelect && (!clsSelect.value || clsSelect.value === 'ม.5/1')) {
-      clsSelect.value = found.classroom;
-    }
+    if (clsSelect) clsSelect.value = found.classroom;
+    const numInput = document.getElementById('studentNumber');
+    if (numInput) numInput.value = found.student_number;
+    const idInput = document.getElementById('studentId');
+    if (idInput) idInput.value = found.student_id;
   }
 }
 
@@ -1130,11 +1173,24 @@ async function handleWorkSubmit(e) {
   const formData = new FormData(form);
 
   const fileInput = document.getElementById('fileInput');
-  const linkInput = document.getElementById('submissionLink');
-  const noteInput = document.getElementById('studentNote');
+  const studentName = (document.getElementById('studentName')?.value || '').trim();
+  const studentNumber = parseInt(document.getElementById('studentNumber')?.value || '0', 10);
+  const classroom = (document.getElementById('studentClassroom')?.value || '').trim();
 
-  if ((!fileInput.files || fileInput.files.length === 0) && !linkInput.value.trim() && !noteInput.value.trim()) {
-    showToast('กรุณาแนบไฟล์ผลงาน หรือกรอกลิงก์ผลงานอย่างน้อย 1 อย่าง', 'warning');
+  if (!classroom) {
+    showToast('กรุณาเลือกห้องเรียน', 'warning');
+    return;
+  }
+  if (studentNumber <= 0) {
+    showToast('กรุณากรอกเลขที่ของนักเรียน', 'warning');
+    return;
+  }
+  if (!studentName) {
+    showToast('กรุณากรอกชื่อ - สกุล', 'warning');
+    return;
+  }
+  if (!fileInput.files || fileInput.files.length === 0) {
+    showToast('กรุณาแนบไฟล์งานที่ต้องการส่ง', 'warning');
     return;
   }
 
