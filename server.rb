@@ -871,12 +871,26 @@ server.mount_proc '/api' do |req, res|
         assignment_id = (query_params['assignment_id'] || '').to_i
         student_id = clean_str(query_params['student_id'])
         student_name = clean_str(query_params['student_name'])
+        student_number = (query_params['student_number'] || '').to_i
         student_email = clean_str(query_params['student_email'])
         note = clean_str(query_params['note'])
         submission_link = clean_str(query_params['submission_link'])
+        cls_param = clean_str(query_params['classroom'])
+        student_classroom = cls_param.empty? ? 'ม.5/1' : cls_param
 
-        if assignment_id <= 0 || student_id.empty? || student_name.empty?
-          send_error(res, 'กรุณากรอกรหัสประจำตัว ชื่อ-นามสกุล และเลือกงานที่ต้องการส่ง')
+        # Lookup student by classroom + student_number if student_id is missing
+        if student_id.empty? && student_number > 0
+          found_std = db.get_first_row('SELECT * FROM students WHERE classroom = ? AND student_number = ?', [student_classroom, student_number])
+          if found_std
+            student_id = found_std['student_id']
+            student_name = found_std['name'] if student_name.empty?
+          else
+            student_id = "std_#{student_classroom.gsub(/[^0-9]/, '')}_#{student_number}"
+          end
+        end
+
+        if assignment_id <= 0 || student_name.empty? || (student_id.empty? && student_number <= 0)
+          send_error(res, 'กรุณาระบุห้อง เลขที่ และชื่อ-สกุล ให้ครบถ้วน')
           next
         end
 
@@ -922,23 +936,18 @@ server.mount_proc '/api' do |req, res|
 
         # Check that at least a file or link is provided (or if student note provided)
         if (file_name.nil? || file_name.empty?) && submission_link.empty? && note.empty?
-          send_error(res, 'กรุณาแนบไฟล์งาน หรือกรอกลิงก์ผลงานอย่างน้อย 1 อย่าง')
+          send_error(res, 'กรุณาแนบไฟล์งานที่ต้องการส่ง')
           next
         end
 
-        cls_param = clean_str(query_params['classroom'])
         # Upsert student into roster if not exists
-        existing_student = if cls_param.empty?
-          db.get_first_row('SELECT * FROM students WHERE student_id = ?', [student_id])
-        else
-          db.get_first_row('SELECT * FROM students WHERE student_id = ? AND classroom = ?', [student_id, cls_param])
-        end
-        student_classroom = cls_param.empty? ? (existing_student ? existing_student['classroom'] : 'ม.5/1') : cls_param
+        existing_student = db.get_first_row('SELECT * FROM students WHERE student_id = ? AND classroom = ?', [student_id, student_classroom]) ||
+                           db.get_first_row('SELECT * FROM students WHERE classroom = ? AND student_number = ?', [student_classroom, student_number])
 
         if existing_student.nil?
           db.execute(
             'INSERT INTO students (student_id, student_number, name, classroom) VALUES (?, ?, ?, ?)',
-            [student_id, 99, student_name, student_classroom]
+            [student_id, (student_number > 0 ? student_number : 99), student_name, student_classroom]
           )
         end
 
