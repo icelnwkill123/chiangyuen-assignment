@@ -469,30 +469,40 @@
 
           <div class="form-row">
             <div class="form-group col-6">
-              <label for="studentId">รหัสประจำตัวนักเรียน <span class="required">*</span></label>
-              <input type="text" id="studentId" name="student_id" required placeholder="เช่น 664324" onblur="handleStudentIdBlur(this.value)">
-              <small class="form-text-hint">ระบบจะดึงชื่อ-นามสกุลให้อัตโนมัติ</small>
+              <label for="studentClassroom">ห้อง <span class="required">*</span></label>
+              <select id="studentClassroom" name="classroom" required onchange="onClassroomOrNumberChange()">
+                <option value="ม.5/1">ม.5/1</option>
+                <option value="ม.5/2">ม.5/2</option>
+                <option value="ม.5/3">ม.5/3</option>
+                <option value="ม.5/4">ม.5/4</option>
+                <option value="ม.5/5">ม.5/5</option>
+                <option value="ม.5/6">ม.5/6</option>
+                <option value="ม.5/7">ม.5/7</option>
+                <option value="ม.5/8">ม.5/8</option>
+              </select>
             </div>
             <div class="form-group col-6">
-              <label for="studentName">ชื่อ - นามสกุล <span class="required">*</span></label>
-              <input type="text" id="studentName" name="student_name" required placeholder="เช่น นายอนุชา พันธุกูล">
+              <label for="studentNumber">เลขที่ <span class="required">*</span></label>
+              <input type="number" id="studentNumber" name="student_number" min="1" max="50" required placeholder="เช่น 1" oninput="onClassroomOrNumberChange()">
             </div>
           </div>
 
           <div class="form-group">
-            <label for="studentEmail">อีเมล (สำหรับรับแจ้งผลคะแนน)</label>
-            <input type="email" id="studentEmail" name="student_email" placeholder="student@school.ac.th">
+            <label for="studentName">ชื่อ - สกุล <span class="required">*</span></label>
+            <input type="text" id="studentName" name="student_name" required placeholder="ชื่อ - นามสกุล">
+            <small class="form-text-hint" id="autoNameHint" style="color: #059669;">ระบบจะดึงชื่อ-สกุลให้อัตโนมัติเมื่อเลือกห้องและเลขที่</small>
+            <input type="hidden" id="studentId" name="student_id">
           </div>
 
           <!-- File Upload Zone -->
           <div class="form-group">
-            <label>แนบไฟล์งาน (PDF, Word, Excel, รูปภาพ, ZIP ฯลฯ)</label>
+            <label>แนบไฟล์งาน <span class="required">*</span></label>
             <div class="drop-zone" id="dropZone">
-              <input type="file" id="fileInput" name="file" class="file-input-hidden" onchange="handleFileSelected(this)">
+              <input type="file" id="fileInput" name="file" class="file-input-hidden" required onchange="handleFileSelected(this)">
               <div class="drop-zone-content" id="dropZonePrompt">
                 <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="15" x2="12" y2="15"></line></svg>
                 <p class="drop-text">ลากไฟล์มาวางที่นี่ หรือ <span class="text-primary">คลิกเลือกไฟล์</span></p>
-                <span class="drop-hint">รองรับไฟล์เอกสาร, รูปภาพ, สไลด์, ZIP ทุกขนาด</span>
+                <span class="drop-hint">รองรับไฟล์รูปภาพ, PDF, Word, สไลด์ ฯลฯ</span>
               </div>
               <div class="file-preview-card" id="filePreviewCard" style="display:none;">
                 <div class="file-preview-info">
@@ -505,16 +515,6 @@
                 <button type="button" class="btn-remove-file" onclick="removeSelectedFile()">&times;</button>
               </div>
             </div>
-          </div>
-
-          <div class="form-group">
-            <label for="submissionLink">หรือ แนบลิงก์ผลงาน (Google Drive, GitHub, Canva, Notion)</label>
-            <input type="url" id="submissionLink" name="submission_link" placeholder="https://drive.google.com/... หรือ https://github.com/...">
-          </div>
-
-          <div class="form-group">
-            <label for="studentNote">หมายเหตุ / ข้อความถึงผู้ตรวจ</label>
-            <textarea id="studentNote" name="note" rows="2" placeholder="ข้อความเพิ่มเติม (ถ้ามี)..."></textarea>
           </div>
         </div>
 
