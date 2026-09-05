@@ -7,8 +7,8 @@ RUN apk add --no-cache build-base sqlite-dev tzdata
 # Set working directory
 WORKDIR /app
 
-# Install sqlite3 gem
-RUN gem install sqlite3 --no-document
+# Install webrick and sqlite3 gems
+RUN gem install webrick sqlite3 --no-document
 
 # Copy application files
 COPY . .
