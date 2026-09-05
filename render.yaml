@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: chiangyuen-assignment
+    env: docker
+    plan: free
+    region: singapore
+    envVars:
+      - key: PORT
+        value: 8080
+      - key: TEACHER_PASSWORD
+        value: 021047
