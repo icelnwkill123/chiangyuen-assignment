@@ -1,0 +1,764 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ระบบตรวจและเช็คงานนักเรียน | เขียว - เหลือง (Student Assignment Portal)</title>
+  <link rel="stylesheet" href="app.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+  <!-- Top Modern Navbar (Green & Yellow School Theme) -->
+  <header class="navbar">
+    <div class="nav-container">
+      <div class="brand">
+        <div class="brand-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+            <polyline points="14 2 14 8 20 8"></polyline>
+            <path d="M9 15l2 2 4-4"></path>
+          </svg>
+        </div>
+        <div class="brand-text">
+          <div class="d-flex align-center gap-2">
+            <h1>ระบบเช็คงานนักเรียน</h1>
+            <span class="school-badge-pill">
+              <span class="dot-green"></span>
+              <span class="dot-yellow"></span>
+              โรงเรียนเชียงยืนพิทยาคม (เขียว - เหลือง)
+            </span>
+          </div>
+          <span class="sub-brand">Student Assignment & Checklist System • ม.5/1 - ม.5/8 ปีการศึกษา 2569</span>
+        </div>
+      </div>
+
+      <div class="nav-actions">
+        <!-- Role Switcher -->
+        <div class="role-selector">
+          <button id="btnRoleStudent" class="role-btn active" onclick="switchRole('student')">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 10v6M2 10l10-5 10 5-10 5z"></path><path d="M6 12v5c3 3 9 3 12 0v-5"></path></svg>
+            <span>มุมมองนักเรียน</span>
+          </button>
+          <button id="btnRoleTeacher" class="role-btn" onclick="switchRole('teacher')">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" id="teacherLockIcon"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+            <span>อาจารย์ผู้ตรวจงาน</span>
+            <span id="teacherAuthBadge" class="auth-pill-dot" style="display:none;" title="เข้าสู่ระบบแล้ว"></span>
+          </button>
+        </div>
+
+        <!-- Teacher Logged-In User Actions -->
+        <div id="teacherSessionControls" class="teacher-session-box" style="display: none;">
+          <div class="teacher-avatar-badge">
+            <span class="pulse-indicator"></span>
+            <span>อาจารย์ผู้ตรวจงาน</span>
+          </div>
+          <button class="btn-logout" onclick="logoutTeacher()" title="ออกจากระบบอาจารย์">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+            <span>ออกจากระบบ</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="main-content">
+
+    <!-- ============================================== -->
+    <!-- 1. STUDENT VIEW                                -->
+    <!-- ============================================== -->
+    <section id="studentView" class="view-panel active">
+      <!-- Hero Banner with Green-Yellow Theme -->
+      <div class="hero-card hero-school-theme">
+        <div class="hero-info">
+          <div class="hero-badge">
+            <span class="dot-gold-glow"></span>
+            🔰 โรงเรียนเชียงยืนพิทยาคม • สีประจำสถาบัน เขียว - เหลือง
+          </div>
+          <h2>ระบบส่งงานและการบ้านออนไลน์ ม.5 (ห้อง 1 - 8)</h2>
+          <p>ส่งไฟล์หรือแนบลิงก์ผลงาน เช็คสถานะการส่งรายบุคคล และดูผลคะแนนพร้อมคำติชมจากอาจารย์ได้ทันที</p>
+        </div>
+        <div class="hero-actions">
+          <button class="btn btn-outline-light" onclick="openMySubmissionsModal()">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+            <span>🔍 ค้นหาประวัติ & คะแนนของฉัน</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Controls & Filter Bar -->
+      <div class="section-header">
+        <div class="section-title">
+          <h3>รายการงานและการบ้านที่เปิดรับ</h3>
+          <span class="badge badge-count" id="studentAssignmentCount">0 งาน</span>
+        </div>
+        <div class="search-filter-box">
+          <div class="search-input-wrapper">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+            <input type="text" id="studentSearchInput" placeholder="ค้นหาชื่องาน หรือชื่อวิชา..." oninput="filterStudentAssignments()">
+          </div>
+        </div>
+      </div>
+
+      <!-- Assignments Card Grid -->
+      <div class="assignments-grid" id="studentAssignmentsList">
+        <div class="loading-spinner">กำลังโหลดรายการงาน...</div>
+      </div>
+    </section>
+
+    <!-- ============================================== -->
+    <!-- 2. TEACHER / INSTRUCTOR VIEW                   -->
+    <!-- ============================================== -->
+    <section id="teacherView" class="view-panel">
+
+      <!-- Teacher Navigation Sub-Tabs -->
+      <div class="teacher-tabs-container">
+        <div class="teacher-tabs">
+          <button class="teacher-tab-btn active" id="tabBtnChecklist" onclick="switchTeacherTab('checklist')">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"></path><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>
+            <span>ตารางเช็คงานนักเรียน (Checklist)</span>
+          </button>
+          <button class="teacher-tab-btn" id="tabBtnAssignments" onclick="switchTeacherTab('assignments')">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+            <span>จัดการหัวข้องาน (<span id="tabCountAssignments">0</span>)</span>
+          </button>
+          <button class="teacher-tab-btn" id="tabBtnStudents" onclick="switchTeacherTab('students')">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+            <span>รายชื่อนักเรียน (<span id="tabCountStudents">0</span>)</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- ------------------------------------------------ -->
+      <!-- TAB 1: ตารางเช็คงานนักเรียน (STUDENT CHECKLIST)    -->
+      <!-- ------------------------------------------------ -->
+      <div id="teacherTabContentChecklist" class="tab-content-panel active">
+        
+        <!-- Assignment Selector & Header Banner -->
+        <div class="checklist-header-card school-accent-top">
+          <div class="checklist-select-group">
+            <label for="checklistAssignmentSelect">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+              <span>เลือกหัวข้องานที่ต้องการเช็ค:</span>
+            </label>
+            <select id="checklistAssignmentSelect" class="form-select-lg school-select" onchange="handleChecklistAssignmentChange()">
+              <!-- Populated via JS -->
+            </select>
+          </div>
+
+          <div class="checklist-assignment-details" id="checklistAssignmentDetails">
+            <!-- Assignment quick stats rendered via JS -->
+          </div>
+        </div>
+
+        <!-- Real-time Progress & Statistics Cards -->
+        <div class="progress-stats-container">
+          <div class="stats-mini-grid">
+            <div class="stat-mini-card border-green">
+              <span class="mini-label">นักเรียนทั้งหมด</span>
+              <span class="mini-value" id="checkStatTotal">0</span>
+              <span class="mini-sub">คนในระบบ</span>
+            </div>
+            <div class="stat-mini-card border-green-bright">
+              <span class="mini-label">ส่งแล้ว</span>
+              <span class="mini-value text-green" id="checkStatSubmitted">0</span>
+              <span class="mini-sub" id="checkStatRate">0%</span>
+            </div>
+            <div class="stat-mini-card border-red">
+              <span class="mini-label">ยังไม่ส่ง</span>
+              <span class="mini-value text-red" id="checkStatMissing">0</span>
+              <span class="mini-sub" id="checkStatMissingRate">0%</span>
+            </div>
+            <div class="stat-mini-card border-gold">
+              <span class="mini-label">ตรวจแล้ว</span>
+              <span class="mini-value text-amber" id="checkStatGraded">0</span>
+              <span class="mini-sub" id="checkStatGradedRate">0%</span>
+            </div>
+            <div class="stat-mini-card border-gold-bright">
+              <span class="mini-label">คะแนนเฉลี่ย</span>
+              <span class="mini-value text-gold" id="checkStatAvgScore">-</span>
+              <span class="mini-sub">คะแนน</span>
+            </div>
+          </div>
+
+          <!-- Animated Progress Bar (Green & Gold) -->
+          <div class="progress-bar-wrapper">
+            <div class="progress-bar-labels">
+              <span class="d-flex align-center gap-1">
+                <span>อัตราการส่งงานรวม (Submission Rate)</span>
+                <span class="school-badge-mini">เขียว-เหลือง</span>
+              </span>
+              <span id="progressBarPercentLabel" class="text-green font-bold">0%</span>
+            </div>
+            <div class="progress-track">
+              <div class="progress-fill progress-fill-submitted" id="progressBarSubmitted" style="width: 0%;"></div>
+              <div class="progress-fill progress-fill-late" id="progressBarLate" style="width: 0%;"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Controls Toolbar: Filters & Actions -->
+        <div class="table-toolbar">
+          <div class="toolbar-left">
+            <!-- Room / Classroom Filter -->
+            <div class="select-wrapper">
+              <label for="filterClassroom">ห้องเรียน:</label>
+              <select id="filterClassroom" onchange="filterChecklistTable()">
+                <option value="">ทั้งหมดทุกห้อง</option>
+              </select>
+            </div>
+
+            <!-- Status Filter Pills -->
+            <div class="status-pills">
+              <button class="status-pill-btn active" data-status="all" onclick="setChecklistStatusFilter('all')">
+                ทั้งหมด (<span id="pillCountAll">0</span>)
+              </button>
+              <button class="status-pill-btn pill-submitted" data-status="submitted" onclick="setChecklistStatusFilter('submitted')">
+                ✅ ส่งแล้ว (<span id="pillCountSubmitted">0</span>)
+              </button>
+              <button class="status-pill-btn pill-missing" data-status="missing" onclick="setChecklistStatusFilter('missing')">
+                ❌ ยังไม่ส่ง (<span id="pillCountMissing">0</span>)
+              </button>
+              <button class="status-pill-btn pill-graded" data-status="graded" onclick="setChecklistStatusFilter('graded')">
+                ⭐ ตรวจแล้ว (<span id="pillCountGraded">0</span>)
+              </button>
+              <button class="status-pill-btn pill-late" data-status="late" onclick="setChecklistStatusFilter('late')">
+                ⏰ ส่งช้า (<span id="pillCountLate">0</span>)
+              </button>
+            </div>
+          </div>
+
+          <div class="toolbar-right">
+            <div class="search-input-wrapper small">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+              <input type="text" id="checklistSearchInput" placeholder="ค้นหาชื่อ หรือรหัสนักเรียน..." oninput="filterChecklistTable()">
+            </div>
+            
+            <a id="btnExportChecklistCsv" href="#" class="btn btn-primary btn-gold-accent">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+              <span>ส่งออกตาราง (Excel CSV)</span>
+            </a>
+          </div>
+        </div>
+
+        <!-- Student Checklist Table -->
+        <div class="card table-card-modern">
+          <div class="table-responsive">
+            <table class="checklist-table">
+              <thead>
+                <tr>
+                  <th style="width: 60px;">เลขที่</th>
+                  <th style="width: 120px;">รหัสนักเรียน</th>
+                  <th>ชื่อ - นามสกุล</th>
+                  <th style="width: 90px;">ห้อง</th>
+                  <th style="width: 130px;">สถานะการส่ง</th>
+                  <th style="width: 140px;">วันเวลาที่ส่ง</th>
+                  <th style="width: 110px;">คะแนน</th>
+                  <th style="width: 150px;" class="text-center">สวิตช์เช็คส่งงานด่วน</th>
+                  <th style="width: 130px;" class="text-center">ตรวจงาน/ให้คะแนน</th>
+                </tr>
+              </thead>
+              <tbody id="checklistTableBody">
+                <tr><td colspan="9" class="text-center py-5">กำลังโหลดข้อมูลตาราง...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ------------------------------------------------ -->
+      <!-- TAB 2: จัดการหัวข้องาน (ASSIGNMENTS MANAGEMENT)  -->
+      <!-- ------------------------------------------------ -->
+      <div id="teacherTabContentAssignments" class="tab-content-panel">
+        
+        <!-- Top Stats Bar -->
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-icon bg-green-soft">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+            </div>
+            <div class="stat-details">
+              <span class="stat-label">หัวข้องานทั้งหมด</span>
+              <span class="stat-value" id="statAssignments">0</span>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon bg-gold-soft">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
+            </div>
+            <div class="stat-details">
+              <span class="stat-label">ยอดส่งงานสะสม</span>
+              <span class="stat-value" id="statSubmissions">0</span>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon bg-orange">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+            </div>
+            <div class="stat-details">
+              <span class="stat-label">รอตรวจให้คะแนน</span>
+              <span class="stat-value text-orange" id="statPending">0</span>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon bg-green">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+            </div>
+            <div class="stat-details">
+              <span class="stat-label">ตรวจเสร็จสิ้นแล้ว</span>
+              <span class="stat-value text-green" id="statGraded">0</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="section-header">
+          <div class="section-title">
+            <h3>รายการหัวข้องานที่สร้างไว้</h3>
+          </div>
+          <button class="btn btn-primary" onclick="openCreateAssignmentModal()">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+            <span>+ สร้างหัวข้องานใหม่</span>
+          </button>
+        </div>
+
+        <div class="card teacher-table-card">
+          <div class="table-responsive">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>รายวิชา & ชื่องาน</th>
+                  <th>กำหนดส่ง</th>
+                  <th>คะแนนเต็ม</th>
+                  <th>ยอดส่ง / สถานะ</th>
+                  <th class="text-center">จัดการ</th>
+                </tr>
+              </thead>
+              <tbody id="teacherAssignmentsTableBody">
+                <tr><td colspan="5" class="text-center py-4">กำลังโหลด...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ------------------------------------------------ -->
+      <!-- TAB 3: บัญชีรายชื่อนักเรียน (STUDENT ROSTER)      -->
+      <!-- ------------------------------------------------ -->
+      <div id="teacherTabContentStudents" class="tab-content-panel">
+        <div class="section-header">
+          <div class="section-title">
+            <h3>บัญชีรายชื่อนักเรียนในระบบ (โรงเรียนเชียงยืนพิทยาคม ม.5)</h3>
+            <span class="badge badge-count" id="rosterCountBadge">0 คน</span>
+          </div>
+          <div class="header-buttons">
+            <button class="btn btn-primary" onclick="openAddStudentModal()">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+              <span>+ เพิ่มนักเรียนใหม่</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Roster Filter Controls -->
+        <div class="table-toolbar">
+          <div class="toolbar-left">
+            <div class="select-wrapper">
+              <label for="rosterFilterClassroom">ห้องเรียน:</label>
+              <select id="rosterFilterClassroom" onchange="renderStudentsTable()">
+                <option value="">ทั้งหมดทุกห้อง (ม.5/1 - ม.5/8)</option>
+                <option value="ม.5/1">ม.5/1</option>
+                <option value="ม.5/2">ม.5/2</option>
+                <option value="ม.5/3">ม.5/3</option>
+                <option value="ม.5/4">ม.5/4</option>
+                <option value="ม.5/5">ม.5/5</option>
+                <option value="ม.5/6">ม.5/6</option>
+                <option value="ม.5/7">ม.5/7</option>
+                <option value="ม.5/8">ม.5/8</option>
+              </select>
+            </div>
+          </div>
+          <div class="toolbar-right">
+            <div class="search-input-wrapper small">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+              <input type="text" id="rosterSearchInput" placeholder="ค้นหาชื่อ หรือเลขประจำตัว..." oninput="renderStudentsTable()">
+            </div>
+          </div>
+        </div>
+
+        <div class="card table-card-modern">
+          <div class="table-responsive">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th style="width: 80px;">เลขที่</th>
+                  <th style="width: 140px;">รหัสนักเรียน</th>
+                  <th>ชื่อ - นามสกุล</th>
+                  <th style="width: 120px;">ห้อง / ชั้น</th>
+                  <th style="width: 100px;" class="text-center">จัดการ</th>
+                </tr>
+              </thead>
+              <tbody id="studentRosterTableBody">
+                <tr><td colspan="5" class="text-center py-4">กำลังโหลดรายชื่อนักเรียน...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- ============================================== -->
+  <!-- MODALS                                         -->
+  <!-- ============================================== -->
+
+  <!-- 0. Teacher Password Login Modal -->
+  <div class="modal-overlay" id="teacherLoginModal">
+    <div class="modal-dialog modal-sm">
+      <div class="modal-header border-0 pb-0">
+        <button class="modal-close" onclick="closeTeacherLoginModal()">&times;</button>
+      </div>
+      <div class="teacher-login-content">
+        <div class="lock-circle-icon school-lock">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+        </div>
+        <h3>เข้าสู่ระบบอาจารย์ผู้ตรวจงาน</h3>
+        <p class="login-subtext">เฉพาะอาจารย์ผู้สอนเท่านั้น กรุณากรอกรหัสผ่านเพื่อเข้าใช้งาน</p>
+
+        <form id="teacherLoginForm" onsubmit="handleTeacherLogin(event)">
+          <div class="password-input-container">
+            <input type="password" id="teacherPasswordInput" class="password-pin-input school-pin-input" placeholder="กรอกรหัสผ่านอาจารย์" autocomplete="current-password" autofocus required>
+            <button type="button" class="btn-toggle-eye" onclick="togglePasswordVisibility('teacherPasswordInput', this)" title="แสดง/ซ่อนรหัสผ่าน">
+              <svg class="icon-eye" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+            </button>
+          </div>
+
+          <div id="loginErrorMessage" class="alert alert-danger mt-3" style="display: none;"></div>
+
+          <div class="modal-actions-stacked mt-4">
+            <button type="submit" class="btn btn-primary btn-block btn-lg" id="btnTeacherLoginSubmit">
+              <span>เข้าสู่ระบบ (Login)</span>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+            </button>
+            <button type="button" class="btn btn-ghost btn-block" onclick="closeTeacherLoginModal()">ยกเลิก</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- 1. Submit Work Modal (Student) -->
+  <div class="modal-overlay" id="submitWorkModal">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h4 id="submitModalTitle">ส่งงาน / การบ้าน</h4>
+        <button class="modal-close" onclick="closeModal('submitWorkModal')">&times;</button>
+      </div>
+      <form id="submitWorkForm" onsubmit="handleWorkSubmit(event)">
+        <input type="hidden" id="submitAssignmentId" name="assignment_id">
+        
+        <div class="modal-body">
+          <div class="alert alert-info" id="submitAssignmentInfo">
+            กำลังโหลดข้อมูลงาน...
+          </div>
+
+          <div class="form-row">
+            <div class="form-group col-6">
+              <label for="studentId">รหัสประจำตัวนักเรียน <span class="required">*</span></label>
+              <input type="text" id="studentId" name="student_id" required placeholder="เช่น 664324" onblur="handleStudentIdBlur(this.value)">
+              <small class="form-text-hint">ระบบจะดึงชื่อ-นามสกุลให้อัตโนมัติ</small>
+            </div>
+            <div class="form-group col-6">
+              <label for="studentName">ชื่อ - นามสกุล <span class="required">*</span></label>
+              <input type="text" id="studentName" name="student_name" required placeholder="เช่น นายอนุชา พันธุกูล">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="studentEmail">อีเมล (สำหรับรับแจ้งผลคะแนน)</label>
+            <input type="email" id="studentEmail" name="student_email" placeholder="student@school.ac.th">
+          </div>
+
+          <!-- File Upload Zone -->
+          <div class="form-group">
+            <label>แนบไฟล์งาน (PDF, Word, Excel, รูปภาพ, ZIP ฯลฯ)</label>
+            <div class="drop-zone" id="dropZone">
+              <input type="file" id="fileInput" name="file" class="file-input-hidden" onchange="handleFileSelected(this)">
+              <div class="drop-zone-content" id="dropZonePrompt">
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="15" x2="12" y2="15"></line></svg>
+                <p class="drop-text">ลากไฟล์มาวางที่นี่ หรือ <span class="text-primary">คลิกเลือกไฟล์</span></p>
+                <span class="drop-hint">รองรับไฟล์เอกสาร, รูปภาพ, สไลด์, ZIP ทุกขนาด</span>
+              </div>
+              <div class="file-preview-card" id="filePreviewCard" style="display:none;">
+                <div class="file-preview-info">
+                  <span class="file-icon">📄</span>
+                  <div class="file-details">
+                    <span class="file-name" id="previewFileName"></span>
+                    <span class="file-size" id="previewFileSize"></span>
+                  </div>
+                </div>
+                <button type="button" class="btn-remove-file" onclick="removeSelectedFile()">&times;</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="submissionLink">หรือ แนบลิงก์ผลงาน (Google Drive, GitHub, Canva, Notion)</label>
+            <input type="url" id="submissionLink" name="submission_link" placeholder="https://drive.google.com/... หรือ https://github.com/...">
+          </div>
+
+          <div class="form-group">
+            <label for="studentNote">หมายเหตุ / ข้อความถึงผู้ตรวจ</label>
+            <textarea id="studentNote" name="note" rows="2" placeholder="ข้อความเพิ่มเติม (ถ้ามี)..."></textarea>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('submitWorkModal')">ยกเลิก</button>
+          <button type="submit" class="btn btn-primary" id="btnSubmitWork">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+            <span>ยืนยันการส่งงาน</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 2. My Submissions Tracker Modal (Student) -->
+  <div class="modal-overlay" id="mySubmissionsModal">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-header">
+        <h4>ประวัติและผลการตรวจงานของฉัน</h4>
+        <button class="modal-close" onclick="closeModal('mySubmissionsModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="search-box-row">
+          <input type="text" id="trackStudentIdInput" placeholder="กรอกรหัสประจำตัว หรือชื่อนักเรียน เพื่อค้นหา..." onkeypress="if(event.key==='Enter') searchMySubmissions()">
+          <button class="btn btn-primary" onclick="searchMySubmissions()">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+            <span>ค้นหา</span>
+          </button>
+        </div>
+        <div id="mySubmissionsResults" class="submissions-results mt-4">
+          <div class="empty-state">
+            <p>กรุณากรอกรหัสนักเรียนเพื่อดูประวัติการส่งงานและคะแนน</p>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('mySubmissionsModal')">ปิดหน้าต่าง</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2.1 Comprehensive Student Assignment Portfolio & Checklist Modal -->
+  <div class="modal-overlay" id="studentPortfolioModal">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-header school-modal-header">
+        <div class="modal-header-title">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+          <h4 id="portfolioModalTitle">สมุดรายงานสถานะการส่งงานของนักเรียน</h4>
+        </div>
+        <button class="modal-close text-white" onclick="closeModal('studentPortfolioModal')">&times;</button>
+      </div>
+
+      <div class="modal-body p-4">
+        <!-- Celebration Alert Banner (Shown right after student submits) -->
+        <div id="portfolioSuccessBanner" class="alert alert-success d-flex align-center gap-3 mb-3" style="display: none;">
+          <div style="font-size: 1.8rem;">🎉</div>
+          <div>
+            <h4 class="m-0 text-green-dark" style="font-size: 1.05rem;">ส่งงานเรียบร้อยแล้ว!</h4>
+            <p class="m-0 text-sm" id="portfolioSuccessMessage">ข้อมูลชิ้นงานได้รับการบันทึกเข้าสู่ระบบอย่างสมบูรณ์แล้ว</p>
+          </div>
+        </div>
+
+        <!-- Student Profile Summary Card -->
+        <div class="student-portfolio-card" id="portfolioProfileCard">
+          <!-- Populated via JS -->
+        </div>
+
+        <!-- Progress Bar Card -->
+        <div class="portfolio-progress-card mt-3" id="portfolioProgressSection">
+          <div class="d-flex justify-between align-center mb-2">
+            <span class="font-weight-600 text-sm">ความคืบหน้าการส่งงานทั้งหมด</span>
+            <span class="badge badge-gold-glow" id="portfolioProgressText">ส่งแล้ว 0 / 0 งาน (0%)</span>
+          </div>
+          <div class="progress-bar-container">
+            <div class="progress-bar-fill school-progress" id="portfolioProgressBar" style="width: 0%;"></div>
+          </div>
+        </div>
+
+        <!-- Section Header -->
+        <div class="d-flex justify-between align-center mt-4 mb-2">
+          <h5 class="m-0 font-weight-700" style="font-size: 0.95rem; color: var(--slate-700);">📑 รายการชิ้นงานและการบ้านทั้งหมดในระบบ:</h5>
+          <span class="text-xs text-muted" id="portfolioClassroomLabel"></span>
+        </div>
+
+        <!-- Assignment List (Checklist items) -->
+        <div id="portfolioItemsContainer" class="portfolio-items-list">
+          <div class="text-center py-4 text-muted">กำลังโหลดข้อมูลชิ้นงาน...</div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('studentPortfolioModal')">ปิดหน้าต่าง</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. Create / Edit Assignment Modal (Teacher) -->
+  <div class="modal-overlay" id="assignmentFormModal">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h4 id="assignmentModalTitle">สร้างหัวข้องานใหม่</h4>
+        <button class="modal-close" onclick="closeModal('assignmentFormModal')">&times;</button>
+      </div>
+      <form id="assignmentForm" onsubmit="handleSaveAssignment(event)">
+        <input type="hidden" id="editAssignmentId">
+        <div class="modal-body">
+          <div class="form-group">
+            <label for="assignSubject">ชื่อรายวิชา <span class="required">*</span></label>
+            <input type="text" id="assignSubject" required placeholder="เช่น Database Systems, CS101">
+          </div>
+          <div class="form-group">
+            <label for="assignTitle">หัวข้องาน / ชื่องาน <span class="required">*</span></label>
+            <input type="text" id="assignTitle" required placeholder="เช่น การบ้านชิ้นที่ 1: การออกแบบ ER Diagram">
+          </div>
+          <div class="form-group">
+            <label for="assignDesc">คำอธิบายและข้อกำหนดงาน</label>
+            <textarea id="assignDesc" rows="3" placeholder="ระบุรายละเอียดงาน สิ่งที่ต้องส่ง รูปแบบไฟล์ ฯลฯ"></textarea>
+          </div>
+          <div class="form-row">
+            <div class="form-group col-6">
+              <label for="assignDueDate">วันและเวลาที่กำหนดส่ง <span class="required">*</span></label>
+              <input type="datetime-local" id="assignDueDate" required>
+            </div>
+            <div class="form-group col-6">
+              <label for="assignMaxScore">คะแนนเต็ม <span class="required">*</span></label>
+              <input type="number" id="assignMaxScore" step="0.5" min="1" value="100" required>
+            </div>
+          </div>
+          <div class="form-checkbox">
+            <label>
+              <input type="checkbox" id="assignAllowLate" checked>
+              <span>อนุญาตให้ส่งงานล่าช้าได้ (ระบบจะแจ้งสถานะว่า "ส่งช้า")</span>
+            </label>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('assignmentFormModal')">ยกเลิก</button>
+          <button type="submit" class="btn btn-primary" id="btnSaveAssignment">บันทึกข้อมูล</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 4. Add Student Modal (Teacher) -->
+  <div class="modal-overlay" id="addStudentModal">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h4>เพิ่มรายชื่อนักเรียนใหม่</h4>
+        <button class="modal-close" onclick="closeModal('addStudentModal')">&times;</button>
+      </div>
+      <form id="addStudentForm" onsubmit="handleSaveStudent(event)">
+        <div class="modal-body">
+          <div class="form-row">
+            <div class="form-group col-6">
+              <label for="inputStdNumber">เลขที่ <span class="required">*</span></label>
+              <input type="number" id="inputStdNumber" min="1" required placeholder="เช่น 12">
+            </div>
+            <div class="form-group col-6">
+              <label for="inputStdClassroom">ห้อง / ชั้น <span class="required">*</span></label>
+              <input type="text" id="inputStdClassroom" required placeholder="เช่น ม.5/1, ม.5/2">
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="inputStdId">รหัสประจำตัวนักเรียน <span class="required">*</span></label>
+            <input type="text" id="inputStdId" required placeholder="เช่น 6601015">
+          </div>
+          <div class="form-group">
+            <label for="inputStdName">ชื่อ - นามสกุล (พร้อมคำนำหน้า) <span class="required">*</span></label>
+            <input type="text" id="inputStdName" required placeholder="เช่น นายสมคิด สถิตย์ธรรม">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('addStudentModal')">ยกเลิก</button>
+          <button type="submit" class="btn btn-primary">บันทึกรายชื่อ</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 5. View Submission & Grade Modal (Teacher) -->
+  <div class="modal-overlay" id="gradeModal">
+    <div class="modal-dialog modal-md">
+      <div class="modal-header">
+        <h4>ตรวจงาน & ให้คะแนนนักเรียน</h4>
+        <button class="modal-close" onclick="closeModal('gradeModal')">&times;</button>
+      </div>
+      <form id="gradeForm" onsubmit="handleSaveGrade(event)">
+        <input type="hidden" id="gradeSubmissionId">
+        <input type="hidden" id="gradeStudentIdHidden">
+        <input type="hidden" id="gradeAssignmentIdHidden">
+
+        <div class="modal-body">
+          <!-- Student Info Header -->
+          <div class="student-grade-header-card">
+            <div class="student-grade-avatar">🎓</div>
+            <div class="student-grade-info">
+              <h4 id="gradeStudentName">-</h4>
+              <p>รหัส: <strong id="gradeStudentId">-</strong> | ห้อง: <span id="gradeClassroom">-</span></p>
+            </div>
+          </div>
+
+          <!-- Submitted Work Content Box -->
+          <div class="submitted-work-preview-box mt-3" id="gradeWorkDetailsBox">
+            <label class="section-sub-label">งานที่นักเรียนส่งเข้ามา:</label>
+            <div id="gradeWorkDetailsContent" class="work-content-inner">
+              <!-- Rendered via JS -->
+            </div>
+          </div>
+
+          <!-- Grading Inputs -->
+          <div class="form-group mt-3">
+            <div class="d-flex justify-between align-center">
+              <label for="inputScore">คะแนนที่ได้ <span class="required">*</span></label>
+              <span class="max-score-badge">คะแนนเต็ม: <strong id="gradeMaxScoreDisplay">100</strong></span>
+            </div>
+            <input type="number" id="inputScore" step="0.5" min="0" required placeholder="กรอกคะแนน เช่น 18.5" class="score-large-input">
+          </div>
+
+          <div class="form-group">
+            <label for="inputFeedback">ข้อเสนอแนะ / คำติชม (Feedback)</label>
+            <textarea id="inputFeedback" rows="3" placeholder="ระบุสิ่งที่ทำได้ดี หรือจุดที่ควรปรับปรุง..."></textarea>
+            <div class="quick-feedback-chips">
+              <span class="chip" onclick="addFeedbackText('ผลงานยอดเยี่ยม ครบถ้วนตามโจทย์')">👍 ยอดเยี่ยมครบถ้วน</span>
+              <span class="chip" onclick="addFeedbackText('งานเรียบร้อย แต่ขาดส่วนสรุป')">📝 ขาดส่วนสรุป</span>
+              <span class="chip" onclick="addFeedbackText('ส่งล่าช้าเกินกำหนด หักคะแนน 10%')">⏰ ส่งช้าหักคะแนน</span>
+              <span class="chip" onclick="addFeedbackText('ควรจัดหน้าและฟอร์แมตให้อ่านง่ายขึ้น')">✨ ปรับรูปแบบ</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('gradeModal')">ยกเลิก</button>
+          <button type="submit" class="btn btn-success" id="btnSaveGrade">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+            <span>บันทึกผลคะแนน</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Toast Container -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
