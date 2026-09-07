@@ -561,11 +561,21 @@ function renderChecklistTable() {
           </button>
         </td>
         <td class="text-center">
-          <button class="btn btn-sm btn-outline-success" 
-                  onclick="openGradeModalForStudent('${escapeHtml(student.student_id)}')">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
-            <span>ตรวจงาน</span>
-          </button>
+          <div class="d-flex justify-center gap-1">
+            <button class="btn btn-sm btn-outline-success" 
+                    onclick="openGradeModalForStudent('${escapeHtml(student.student_id)}')">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+              <span>ตรวจงาน</span>
+            </button>
+            ${student.submission_id ? `
+              <button class="btn btn-sm btn-outline-danger" 
+                      onclick="confirmDeleteSubmission(${student.submission_id}, '${escapeHtml(student.student_name)}')"
+                      title="ลบงานนี้เพื่อให้นักเรียนส่งใหม่">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                <span>ลบ</span>
+              </button>
+            ` : ''}
+          </div>
         </td>
       </tr>
     `;
@@ -631,6 +641,11 @@ function openGradeModalForStudent(studentId) {
   document.getElementById('inputScore').value = student.score !== null && student.score !== undefined ? student.score : '';
   document.getElementById('inputScore').max = assign.max_score;
   document.getElementById('inputFeedback').value = student.feedback || '';
+
+  const deleteBtn = document.getElementById('btnDeleteSubmission');
+  if (deleteBtn) {
+    deleteBtn.style.display = student.submission_id ? 'inline-flex' : 'none';
+  }
 
   // Submitted content preview
   const detailsBox = document.getElementById('gradeWorkDetailsContent');
@@ -736,6 +751,70 @@ function addFeedbackText(text) {
     input.value = text;
   }
 }
+
+// Handle Delete Submission in Modal
+async function handleDeleteSubmissionInModal() {
+  const subId = document.getElementById('gradeSubmissionId').value;
+  const studentName = document.getElementById('gradeStudentName').textContent;
+  if (!subId) {
+    showToast('ไม่พบข้อมูลการส่งงานที่ต้องการลบ', 'error');
+    return;
+  }
+
+  if (!confirm(`⚠️ ยืนยันการลบงานของ "${studentName}" หรือไม่?\n\nเมื่อลบแล้ว:\n• ไฟล์งานและคะแนนจะถูกลบออกจากระบบ\n• สถานะจะกลับเป็น "ยังไม่ส่ง"\n• นักเรียนจะสามารถกดส่งงานใหม่ได้ทันที`)) {
+    return;
+  }
+
+  try {
+    const res = await fetch(`/api/submissions/${subId}/delete`, {
+      method: 'POST',
+      headers: getAuthHeaders()
+    });
+
+    const data = await res.json();
+    if (res.ok && data.success) {
+      showToast('🗑️ ลบงานเรียบร้อยแล้ว นักเรียนสามารถส่งใหม่ได้ทันที', 'success');
+      closeModal('gradeModal');
+      fetchChecklistData(currentChecklistAssignmentId, currentClassFilter);
+    } else {
+      showToast(data.error || 'เกิดข้อผิดพลาดในการลบงาน', 'error');
+    }
+  } catch (err) {
+    console.error(err);
+    showToast('เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์', 'error');
+  }
+}
+
+// Confirm Delete Submission directly from Checklist Table
+async function confirmDeleteSubmission(subId, studentName) {
+  if (!teacherToken) {
+    openTeacherLoginModal();
+    return;
+  }
+
+  if (!confirm(`⚠️ คุณครูต้องการลบการส่งงานของ "${studentName}" หรือไม่?\n\nเมื่อลบแล้ว นักเรียนจะสามารถส่งงานใหม่ได้ทันที`)) {
+    return;
+  }
+
+  try {
+    const res = await fetch(`/api/submissions/${subId}/delete`, {
+      method: 'POST',
+      headers: getAuthHeaders()
+    });
+
+    const data = await res.json();
+    if (res.ok && data.success) {
+      showToast('🗑️ ลบงานเรียบร้อยแล้ว นักเรียนสามารถส่งใหม่ได้ทันที', 'success');
+      fetchChecklistData(currentChecklistAssignmentId, currentClassFilter);
+    } else {
+      showToast(data.error || 'เกิดข้อผิดพลาดในการลบงาน', 'error');
+    }
+  } catch (err) {
+    console.error(err);
+    showToast('เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์', 'error');
+  }
+}
+
 
 // ==============================================
 // TAB 2: TEACHER ASSIGNMENTS MANAGEMENT
@@ -1429,9 +1508,14 @@ async function openStudentPortfolioModal(studentId, classroom = '', justSubmitte
               <div class="d-flex justify-between align-center">
                 <span>🕒 วันเวลาที่ส่ง: <strong>${formatThaiDateTime(item.submission.submitted_at)}</strong></span>
                 ${teacherToken ? `
-                  <button class="btn btn-sm btn-outline-success" onclick="closeModal('studentPortfolioModal'); openGradeModalForStudent('${escapeHtml(student.student_id)}')">
-                    ✏️ ตรวจ/ให้คะแนน
-                  </button>
+                  <div class="d-flex gap-1">
+                    <button class="btn btn-sm btn-outline-success" onclick="closeModal('studentPortfolioModal'); openGradeModalForStudent('${escapeHtml(student.student_id)}')">
+                      ✏️ ตรวจ/ให้คะแนน
+                    </button>
+                    <button class="btn btn-sm btn-outline-danger" onclick="deleteSubmissionFromPortfolio(${item.submission.id}, '${escapeHtml(student.name)}', '${escapeHtml(student.student_id)}', '${escapeHtml(student.classroom)}')" title="ลบงานนี้เพื่อให้นักเรียนส่งใหม่">
+                      🗑️ ลบงาน
+                    </button>
+                  </div>
                 ` : ''}
               </div>
 
@@ -1467,6 +1551,42 @@ async function openStudentPortfolioModal(studentId, classroom = '', justSubmitte
     itemsContainer.innerHTML = '<div class="alert alert-danger">เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์</div>';
   }
 }
+
+// Delete Submission from Portfolio View
+async function deleteSubmissionFromPortfolio(subId, studentName, studentId, classroom) {
+  if (!teacherToken) {
+    openTeacherLoginModal();
+    return;
+  }
+
+  if (!confirm(`⚠️ คุณครูต้องการลบการส่งงานของ "${studentName}" เพื่อให้นักเรียนส่งใหม่ใช่หรือไม่?\n\nเมื่อลบแล้ว นักเรียนจะสามารถส่งงานใหม่ได้ทันที`)) {
+    return;
+  }
+
+  try {
+    const res = await fetch(`/api/submissions/${subId}/delete`, {
+      method: 'POST',
+      headers: getAuthHeaders()
+    });
+
+    const data = await res.json();
+    if (res.ok && data.success) {
+      showToast('🗑️ ลบงานเรียบร้อยแล้ว นักเรียนสามารถส่งใหม่ได้ทันที', 'success');
+      // Refresh portfolio modal
+      openStudentPortfolioModal(studentId, classroom);
+      // Refresh background checklist if open
+      if (currentChecklistAssignmentId) {
+        fetchChecklistData(currentChecklistAssignmentId, currentClassFilter);
+      }
+    } else {
+      showToast(data.error || 'เกิดข้อผิดพลาดในการลบงาน', 'error');
+    }
+  } catch (err) {
+    console.error(err);
+    showToast('เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์', 'error');
+  }
+}
+
 
 // ==============================================
 // DRAG AND DROP FILE UPLOADER
