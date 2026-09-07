@@ -445,7 +445,7 @@ server.mount_proc '/api' do |req, res|
     # -----------------------------
     when '/api/students'
       if method == 'GET'
-        classroom = req.query['classroom'].to_s.strip
+        classroom = clean_str(req.query['classroom'])
         if classroom.empty?
           students = db.execute('SELECT * FROM students ORDER BY classroom ASC, student_number ASC')
         else
@@ -556,7 +556,7 @@ server.mount_proc '/api' do |req, res|
         next
       end
 
-      classroom_filter = (req.query['classroom'] || '').strip
+      classroom_filter = clean_str(req.query['classroom'])
 
       query = <<-SQL
         SELECT 
@@ -766,7 +766,7 @@ server.mount_proc '/api' do |req, res|
         next
       end
 
-      classroom_filter = (req.query['classroom'] || '').strip
+      classroom_filter = clean_str(req.query['classroom'])
 
       query = <<-SQL
         SELECT 
@@ -1037,7 +1037,7 @@ server.mount_proc '/api' do |req, res|
     # 12. Search Submissions by Student ID: GET /api/submissions/search?student_id=...
     # -----------------------------
     when '/api/submissions/search'
-      student_id = (req.query['student_id'] || '').strip
+      student_id = clean_str(req.query['student_id'])
       if student_id.empty?
         send_json(res, [])
         next
@@ -1057,8 +1057,8 @@ server.mount_proc '/api' do |req, res|
     # 12.1 Student Portfolio & Checklist: GET /api/students/portfolio?student_id=...&classroom=...
     # -----------------------------
     when '/api/students/portfolio'
-      student_id = (req.query['student_id'] || '').strip
-      classroom = (req.query['classroom'] || '').strip
+      student_id = clean_str(req.query['student_id'])
+      classroom = clean_str(req.query['classroom'])
 
       if student_id.empty?
         send_error(res, 'กรุณาระบุรหัสนักเรียน', 400)
@@ -1070,6 +1070,11 @@ server.mount_proc '/api' do |req, res|
         db.execute('SELECT * FROM students WHERE student_id = ? OR student_id LIKE ?', [student_id, "%#{student_id}%"])
       else
         db.execute('SELECT * FROM students WHERE (student_id = ? OR student_id LIKE ?) AND classroom = ?', [student_id, "%#{student_id}%", classroom])
+      end
+
+      # Fallback: If not found with classroom, search by student_id alone
+      if students.empty? && !classroom.empty?
+        students = db.execute('SELECT * FROM students WHERE student_id = ? OR student_id LIKE ?', [student_id, "%#{student_id}%"])
       end
 
       if students.empty?
