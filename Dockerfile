@@ -19,6 +19,7 @@ RUN mkdir -p /app/uploads /app/db && chmod -R 777 /app/uploads /app/db
 # Expose port (Render automatically injects PORT environment variable)
 ENV PORT=8080
 ENV TEACHER_PASSWORD=021047
+ENV GITHUB_REPO=icelnwkill123/chiangyuen-assignment
 
 EXPOSE 8080
 
