@@ -402,6 +402,42 @@ function updateExportCsvLink(assignmentId, classroom) {
   }
 }
 
+async function syncDatabaseToGithub() {
+  const token = localStorage.getItem('teacher_token') || sessionStorage.getItem('teacher_token');
+  if (!token) {
+    showToast('กรุณาเข้าสู่ระบบอาจารย์ก่อนทำการสำรองข้อมูล', 'warning');
+    return;
+  }
+  const btn = document.getElementById('btnSyncGithub');
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span>กำลังซิงค์...</span>';
+  }
+  showToast('☁️ กำลังสำรองฐานข้อมูลขึ้น GitHub ถาวร...', 'info');
+  try {
+    const res = await fetch('/api/sync/github', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      showToast('🎉 สำรองฐานข้อมูลขึ้น GitHub สำเร็จแล้ว! (ปลอดภัย 100%)', 'success');
+    } else {
+      showToast(data.error || 'เกิดข้อผิดพลาดในการซิงค์', 'error');
+    }
+  } catch (err) {
+    console.error(err);
+    showToast('ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้', 'error');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg><span>บันทึกขึ้น GitHub ถาวร</span>`;
+    }
+  }
+}
+
 function setChecklistStatusFilter(status) {
   currentStatusFilter = status;
   document.querySelectorAll('.status-pill-btn').forEach(btn => {
