@@ -9,3 +9,5 @@ services:
         value: 8080
       - key: TEACHER_PASSWORD
         value: 021047
+      - key: GITHUB_REPO
+        value: icelnwkill123/chiangyuen-assignment
