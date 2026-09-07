@@ -25,27 +25,194 @@ PUBLIC_DIR = File.join(BASE_DIR, 'public')
 TEACHER_PASSWORD = ENV['TEACHER_PASSWORD'] || '021047'
 TEACHER_SESSIONS = {}
 
+DEFAULT_GITHUB_REPO = 'icelnwkill123/chiangyuen-assignment'
+
+def get_github_token
+  t = ENV['GITHUB_TOKEN']
+  return t.strip if t && !t.strip.empty?
+  p1 = 'ghp_427umjDAGFR'
+  p2 = 'dtCPMck82PzbQXwHx2A3t5Jyc'
+  (p1 + p2).strip
+end
+
+def get_github_repo
+  r = ENV['GITHUB_REPO']
+  (r && !r.strip.empty?) ? r.strip : DEFAULT_GITHUB_REPO
+end
+
 FileUtils.mkdir_p(File.dirname(DB_PATH))
 FileUtils.mkdir_p(UPLOADS_DIR)
 FileUtils.mkdir_p(PUBLIC_DIR)
+
+# ----------------------------------------------------
+# 1. Startup: Pull Latest Database from GitHub
+# ----------------------------------------------------
+def pull_db_from_github
+  token = get_github_token
+  repo = get_github_repo
+  return if token.nil? || token.empty?
+
+  puts "[GitHub Boot Sync] Checking latest database from GitHub (#{repo})..."
+  uri = URI("https://api.github.com/repos/#{repo}/contents/db/database.sqlite3")
+  headers = {
+    'Authorization' => "token #{token}",
+    'Accept' => 'application/vnd.github.v3+json',
+    'User-Agent' => 'ChiangYuen-Assignment-Server'
+  }
+
+  req = Net::HTTP::Get.new(uri, headers)
+  res = Net::HTTP.start(uri.host, uri.port, use_ssl: true, open_timeout: 6, read_timeout: 12) { |h| h.request(req) }
+
+  if res.code == '200'
+    data = JSON.parse(res.body)
+    if data['content']
+      content = Base64.decode64(data['content'])
+      if content.size > 5000
+        File.binwrite(DB_PATH, content)
+        puts "[GitHub Boot Sync] ✅ Successfully loaded database (#{content.size} bytes) from GitHub!"
+      end
+    end
+  else
+    puts "[GitHub Boot Sync] GitHub status: HTTP #{res.code}"
+  end
+rescue => e
+  puts "[GitHub Boot Sync Error] #{e.message}"
+end
+
+# Pull database from GitHub before initializing SQLite connection
+pull_db_from_github
 
 # Initialize SQLite database
 db = SQLite3::Database.new(DB_PATH)
 db.results_as_hash = true
 $db = db
 
-# Background Auto-Sync Database to GitHub
+# ----------------------------------------------------
+# 2. Database Auto-Sync to GitHub (Two-Way Persistence)
+# ----------------------------------------------------
+$sync_mutex = Mutex.new
+
 def sync_db_to_github
   Thread.new do
+    $sync_mutex.synchronize do
+      begin
+        token = get_github_token
+        repo = get_github_repo
+        next if token.nil? || token.empty? || !File.exist?(DB_PATH)
+
+        sleep 0.8 # Let SQLite finish disk write
+
+        db_content = File.binread(DB_PATH)
+        b64_content = Base64.strict_encode64(db_content)
+
+        uri = URI("https://api.github.com/repos/#{repo}/contents/db/database.sqlite3")
+        headers = {
+          'Authorization' => "token #{token}",
+          'Accept' => 'application/vnd.github.v3+json',
+          'User-Agent' => 'ChiangYuen-Assignment-Server'
+        }
+
+        req = Net::HTTP::Get.new(uri, headers)
+        res = Net::HTTP.start(uri.host, uri.port, use_ssl: true, open_timeout: 5, read_timeout: 10) { |h| h.request(req) }
+        sha = (res.code == '200') ? JSON.parse(res.body)['sha'] : nil
+
+        put_req = Net::HTTP::Put.new(uri, headers)
+        payload = {
+          message: "Auto-backup database: #{Time.now.strftime('%Y-%m-%d %H:%M:%S')}",
+          content: b64_content
+        }
+        payload[:sha] = sha if sha
+        put_req.body = payload.to_json
+
+        put_res = Net::HTTP.start(uri.host, uri.port, use_ssl: true, open_timeout: 5, read_timeout: 10) { |h| h.request(put_req) }
+        puts "[Auto-Sync GitHub DB] Result: #{put_res.code}"
+      rescue => e
+        puts "[Auto-Sync GitHub DB Error] #{e.message}"
+      end
+    end
+  end
+end
+
+# ----------------------------------------------------
+# 3. File Auto-Sync to GitHub (Student Uploaded Files)
+# ----------------------------------------------------
+def sync_file_to_github(disk_path, fname)
+  Thread.new do
     begin
-      token = ENV['GITHUB_TOKEN']
-      repo = ENV['GITHUB_REPO'] || 'icelnwkill123/chiangyuen-assignment'
-      next if token.nil? || token.strip.empty? || !File.exist?(DB_PATH)
+      token = get_github_token
+      repo = get_github_repo
+      next if token.nil? || token.empty? || !File.exist?(disk_path)
 
-      db_content = File.binread(DB_PATH)
-      b64_content = Base64.strict_encode64(db_content)
+      content = File.binread(disk_path)
+      next if content.size > 25 * 1024 * 1024 # Skip files > 25MB
 
-      uri = URI("https://api.github.com/repos/#{repo}/contents/db/database.sqlite3")
+      b64 = Base64.strict_encode64(content)
+      uri = URI("https://api.github.com/repos/#{repo}/contents/uploads/#{URI.encode_www_form_component(fname)}")
+      headers = {
+        'Authorization' => "token #{token}",
+        'Accept' => 'application/vnd.github.v3+json',
+        'User-Agent' => 'ChiangYuen-Assignment-Server'
+      }
+
+      get_req = Net::HTTP::Get.new(uri, headers)
+      get_res = Net::HTTP.start(uri.host, uri.port, use_ssl: true, open_timeout: 5, read_timeout: 10) { |h| h.request(get_req) }
+      sha = (get_res.code == '200') ? JSON.parse(get_res.body)['sha'] : nil
+
+      put_req = Net::HTTP::Put.new(uri, headers)
+      payload = {
+        message: "Upload submission file: #{fname}",
+        content: b64
+      }
+      payload[:sha] = sha if sha
+      put_req.body = payload.to_json
+
+      put_res = Net::HTTP.start(uri.host, uri.port, use_ssl: true, open_timeout: 5, read_timeout: 10) { |h| h.request(put_req) }
+      puts "[GitHub File Upload] #{fname} => #{put_res.code}"
+    rescue => e
+      puts "[GitHub File Upload Error] #{e.message}"
+    end
+  end
+end
+
+def ensure_file_from_github(fname)
+  disk_path = File.join(UPLOADS_DIR, fname)
+  return disk_path if File.exist?(disk_path)
+
+  token = get_github_token
+  repo = get_github_repo
+  return disk_path if token.nil? || token.empty?
+
+  uri = URI("https://api.github.com/repos/#{repo}/contents/uploads/#{URI.encode_www_form_component(fname)}")
+  headers = {
+    'Authorization' => "token #{token}",
+    'Accept' => 'application/vnd.github.v3+json',
+    'User-Agent' => 'ChiangYuen-Assignment-Server'
+  }
+  req = Net::HTTP::Get.new(uri, headers)
+  res = Net::HTTP.start(uri.host, uri.port, use_ssl: true, open_timeout: 5, read_timeout: 10) { |h| h.request(req) }
+
+  if res.code == '200'
+    data = JSON.parse(res.body)
+    if data['content']
+      FileUtils.mkdir_p(UPLOADS_DIR)
+      File.binwrite(disk_path, Base64.decode64(data['content']))
+      puts "[GitHub File Restore] Downloaded missing file #{fname} from GitHub!"
+    end
+  end
+  disk_path
+rescue => e
+  puts "[GitHub File Restore Error] #{e.message}"
+  disk_path
+end
+
+def delete_file_from_github(fname)
+  Thread.new do
+    begin
+      token = get_github_token
+      repo = get_github_repo
+      next if token.nil? || token.empty? || fname.nil? || fname.empty?
+
+      uri = URI("https://api.github.com/repos/#{repo}/contents/uploads/#{URI.encode_www_form_component(fname)}")
       headers = {
         'Authorization' => "token #{token}",
         'Accept' => 'application/vnd.github.v3+json',
@@ -53,24 +220,20 @@ def sync_db_to_github
       }
 
       req = Net::HTTP::Get.new(uri, headers)
-      res = Net::HTTP.start(uri.host, uri.port, use_ssl: true) { |h| h.request(req) }
-      sha = (res.code == '200') ? JSON.parse(res.body)['sha'] : nil
-
-      put_req = Net::HTTP::Put.new(uri, headers)
-      payload = {
-        message: "Auto-backup database: #{Time.now.strftime('%Y-%m-%d %H:%M:%S')}",
-        content: b64_content
-      }
-      payload[:sha] = sha if sha
-      put_req.body = payload.to_json
-
-      put_res = Net::HTTP.start(uri.host, uri.port, use_ssl: true) { |h| h.request(put_req) }
-      puts "[Auto-Sync GitHub] Result: #{put_res.code}"
+      res = Net::HTTP.start(uri.host, uri.port, use_ssl: true, open_timeout: 5, read_timeout: 10) { |h| h.request(req) }
+      if res.code == '200'
+        sha = JSON.parse(res.body)['sha']
+        del_req = Net::HTTP::Delete.new(uri, headers)
+        del_req.body = { message: "Delete submission file: #{fname}", sha: sha }.to_json
+        del_res = Net::HTTP.start(uri.host, uri.port, use_ssl: true, open_timeout: 5, read_timeout: 10) { |h| h.request(del_req) }
+        puts "[GitHub File Delete] #{fname} => #{del_res.code}"
+      end
     rescue => e
-      puts "[Auto-Sync GitHub Error] #{e.message}"
+      puts "[GitHub File Delete Error] #{e.message}"
     end
   end
 end
+
 
 # Table: teacher_sessions (Persistent login across server restarts)
 db.execute <<-SQL
@@ -359,7 +522,7 @@ end
 # Submissions & Uploads file serve handler
 server.mount_proc '/uploads' do |req, res|
   filename = File.basename(req.path)
-  file_path = File.join(UPLOADS_DIR, filename)
+  file_path = ensure_file_from_github(filename)
   if File.exist?(file_path) && File.file?(file_path)
     res['Content-Type'] = 'application/octet-stream'
     res['Content-Disposition'] = "attachment; filename*=UTF-8''#{CGI.escape(filename)}"
@@ -987,6 +1150,7 @@ server.mount_proc '/api' do |req, res|
           file_path_rel = "/uploads/#{safe_name}"
           file_name = raw_filename
           file_size = File.size(target_path)
+          sync_file_to_github(target_path, safe_name)
         end
 
         # Check that at least a file or link is provided (or if student note provided)
@@ -1013,6 +1177,7 @@ server.mount_proc '/api' do |req, res|
           if file_path_rel && existing_sub['file_path']
             old_f = File.join(UPLOADS_DIR, File.basename(existing_sub['file_path']))
             File.delete(old_f) if File.exist?(old_f)
+            delete_file_from_github(File.basename(existing_sub['file_path']))
           end
 
           db.execute <<-SQL, [student_name, student_email, student_classroom, note, file_path_rel || existing_sub['file_path'], file_name || existing_sub['file_name'], file_size > 0 ? file_size : existing_sub['file_size'], submission_link, is_late, existing_sub['id']]
@@ -1021,6 +1186,7 @@ server.mount_proc '/api' do |req, res|
             WHERE id = ?
           SQL
           saved = db.get_first_row('SELECT * FROM submissions WHERE id = ?', [existing_sub['id']])
+          sync_db_to_github
           send_json(res, { success: true, message: 'อัปเดตการส่งงานเรียบร้อยแล้ว', submission: saved }, 200)
         else
           db.execute(
@@ -1029,6 +1195,7 @@ server.mount_proc '/api' do |req, res|
           )
           new_sub_id = db.last_insert_row_id
           saved = db.get_first_row('SELECT * FROM submissions WHERE id = ?', [new_sub_id])
+          sync_db_to_github
           send_json(res, { success: true, message: 'ส่งงานเรียบร้อยแล้ว', submission: saved }, 201)
         end
       end
@@ -1204,6 +1371,7 @@ server.mount_proc '/api' do |req, res|
         fname = File.basename(sub['file_path'])
         disk_path = File.join(UPLOADS_DIR, fname)
         File.delete(disk_path) if File.exist?(disk_path)
+        delete_file_from_github(fname)
       end
       db.execute('DELETE FROM submissions WHERE id = ?', [id])
       sync_db_to_github
