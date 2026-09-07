@@ -1190,25 +1190,24 @@ server.mount_proc '/api' do |req, res|
       end
 
     # -----------------------------
-    # 14. Delete Submission: DELETE /api/submissions/:id
+    # 14. Delete Submission: DELETE /api/submissions/:id or POST /api/submissions/:id/delete
     # -----------------------------
-    when %r{\A/api/submissions/(\d+)\z}
+    when %r{\A/api/submissions/(\d+)(?:/delete)?\z}
       unless check_teacher_auth(req)
         send_error(res, 'กรุณาเข้าสู่ระบบด้วยรหัสผ่านอาจารย์ก่อนลบการส่งงาน', 401)
         next
       end
 
       id = Regexp.last_match(1).to_i
-      if method == 'DELETE'
-        sub = db.get_first_row('SELECT file_path FROM submissions WHERE id = ?', [id])
-        if sub && sub['file_path']
-          fname = File.basename(sub['file_path'])
-          disk_path = File.join(UPLOADS_DIR, fname)
-          File.delete(disk_path) if File.exist?(disk_path)
-        end
-        db.execute('DELETE FROM submissions WHERE id = ?', [id])
-        send_json(res, { success: true, message: 'ลบการส่งงานเรียบร้อยแล้ว' })
+      sub = db.get_first_row('SELECT file_path FROM submissions WHERE id = ?', [id])
+      if sub && sub['file_path']
+        fname = File.basename(sub['file_path'])
+        disk_path = File.join(UPLOADS_DIR, fname)
+        File.delete(disk_path) if File.exist?(disk_path)
       end
+      db.execute('DELETE FROM submissions WHERE id = ?', [id])
+      sync_db_to_github
+      send_json(res, { success: true, message: 'ลบการส่งงานเรียบร้อยแล้ว นักเรียนสามารถส่งใหม่ได้ทันที' })
 
     else
       send_error(res, "Endpoint not found: #{path}", 404)
