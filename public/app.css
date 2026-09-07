@@ -1366,7 +1366,7 @@ body {
 
 .modal-sm { max-width: 420px; }
 .modal-md { max-width: 620px; }
-.modal-lg { max-width: 800px; }
+.modal-lg { max-width: 960px; width: 95%; }
 
 .modal-header {
   padding: 1.25rem 1.5rem;
@@ -2063,4 +2063,188 @@ input:focus, textarea:focus, select:focus {
   .table-toolbar { flex-direction: column; align-items: stretch; }
   .toolbar-left, .toolbar-right { width: 100%; justify-content: space-between; }
   .status-pills { overflow-x: auto; width: 100%; }
+}
+
+/* Student Tracker Card (Home Page Search) */
+.student-tracker-card {
+  background: #ffffff;
+  border: 2px solid rgba(5, 150, 105, 0.25);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem;
+  margin-bottom: 2rem;
+  box-shadow: 0 10px 25px -5px rgba(5, 150, 105, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
+}
+
+.tracker-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.tracker-icon-badge {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, var(--school-green), var(--school-green-dark));
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 4px 10px rgba(5, 150, 105, 0.3);
+}
+
+.tracker-title {
+  margin: 0 0 0.25rem 0;
+  font-size: 1.2rem;
+  color: var(--slate-900);
+  font-weight: 700;
+}
+
+.tracker-subtitle {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--slate-500);
+}
+
+.tracker-input-group {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.tracker-input-wrapper {
+  position: relative;
+  flex: 1;
+  min-width: 260px;
+}
+
+.tracker-input-wrapper svg {
+  position: absolute;
+  left: 1rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--slate-400);
+}
+
+.tracker-input-wrapper input {
+  width: 100%;
+  padding: 0.85rem 1rem 0.85rem 2.75rem;
+  font-size: 1rem;
+  border: 2px solid var(--slate-200);
+  border-radius: var(--radius);
+  transition: all 0.2s ease;
+  background: #f8fafc;
+}
+
+.tracker-input-wrapper input:focus {
+  outline: none;
+  border-color: var(--school-green);
+  background: #fff;
+  box-shadow: 0 0 0 4px rgba(5, 150, 105, 0.12);
+}
+
+.btn-check-student {
+  padding: 0.85rem 1.5rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  white-space: nowrap;
+}
+
+.tracker-quick-hints {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.85rem;
+  flex-wrap: wrap;
+  font-size: 0.85rem;
+  color: var(--slate-500);
+}
+
+.hint-chip {
+  background: #f1f5f9;
+  border: 1px solid var(--slate-200);
+  border-radius: 20px;
+  padding: 0.2rem 0.65rem;
+  font-size: 0.8rem;
+  color: var(--slate-700);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.hint-chip:hover {
+  background: #e2e8f0;
+  border-color: var(--slate-300);
+  color: var(--school-green-dark);
+}
+
+/* Student Submissions Table Styles */
+.student-checklist-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  margin-top: 1rem;
+}
+
+.student-checklist-table th {
+  background: #f8fafc;
+  padding: 0.85rem 1rem;
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: var(--slate-700);
+  border-bottom: 2px solid var(--slate-200);
+}
+
+.student-checklist-table td {
+  padding: 0.95rem 1rem;
+  vertical-align: middle;
+  border-bottom: 1px solid var(--slate-200);
+  font-size: 0.9rem;
+}
+
+.student-checklist-table tr.row-submitted {
+  background: #f0fdf4;
+}
+
+.student-checklist-table tr.row-missing {
+  background: #fff;
+}
+
+.student-checklist-table tr:hover {
+  background: #f8fafc;
+}
+
+.file-link-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.6rem;
+  background: #ffffff;
+  border: 1px solid #bbf7d0;
+  border-radius: 6px;
+  font-size: 0.82rem;
+  color: var(--school-green-dark);
+  text-decoration: none;
+  font-weight: 600;
+  transition: all 0.15s ease;
+}
+
+.file-link-badge:hover {
+  background: #ecfdf5;
+  border-color: var(--school-green);
+  text-decoration: underline;
+}
+
+.teacher-feedback-cell {
+  background: #fffbeb;
+  border-left: 3px solid #f59e0b;
+  padding: 0.35rem 0.65rem;
+  border-radius: 0 6px 6px 0;
+  font-size: 0.82rem;
+  color: #92400e;
+  display: inline-block;
+  max-width: 250px;
 }
