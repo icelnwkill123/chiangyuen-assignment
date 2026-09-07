@@ -292,11 +292,15 @@ function populateChecklistAssignmentDropdown() {
     return;
   }
 
-  select.innerHTML = allAssignments.map(a => `
-    <option value="${a.id}" ${a.id === currentChecklistAssignmentId ? 'selected' : ''}>
-      ${escapeHtml(a.subject)} - ${escapeHtml(a.title)} (คะแนนเต็ม ${a.max_score})
-    </option>
-  `).join('');
+  select.innerHTML = allAssignments.map(a => {
+    const subCount = a.submissions_count || 0;
+    const badge = subCount > 0 ? ` [ส่งแล้ว ${subCount} คน 🟢]` : ' [ส่งแล้ว 0 คน]';
+    return `
+      <option value="${a.id}" ${a.id === currentChecklistAssignmentId ? 'selected' : ''}>
+        ${escapeHtml(a.title)}${badge} (วิชา ${escapeHtml(a.subject)})
+      </option>
+    `;
+  }).join('');
 }
 
 function handleChecklistAssignmentChange() {
