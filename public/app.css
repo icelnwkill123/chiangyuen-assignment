@@ -1249,6 +1249,32 @@ body {
   color: var(--slate-900);
 }
 
+.btn-danger {
+  background: #ef4444;
+  color: #fff;
+  border-color: #dc2626;
+  box-shadow: 0 4px 10px rgba(239, 68, 68, 0.25);
+}
+
+.btn-danger:hover {
+  background: #dc2626;
+  border-color: #b91c1c;
+  transform: translateY(-1px);
+}
+
+.btn-outline-danger {
+  background: #fff;
+  color: #ef4444;
+  border-color: #fca5a5;
+}
+
+.btn-outline-danger:hover {
+  background: #fef2f2;
+  border-color: #ef4444;
+  color: #dc2626;
+}
+
+
 .btn-outline-success {
   background: #fff;
   color: var(--school-green-dark);
