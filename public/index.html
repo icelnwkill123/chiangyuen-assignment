@@ -89,6 +89,46 @@
         </div>
       </div>
 
+      <!-- ============================================== -->
+      <!-- Prominent Student Self-Check Tracker Section   -->
+      <!-- ============================================== -->
+      <div class="student-tracker-card" id="studentTrackerSection">
+        <div class="tracker-header">
+          <div class="tracker-icon-badge">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"></path><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>
+          </div>
+          <div class="tracker-text">
+            <h3 class="tracker-title">🔍 ตรวจสอบการส่งงานของนักเรียน (กรอกรหัสนักเรียน)</h3>
+            <p class="tracker-subtitle">นักเรียนสามารถกรอกรหัสประจำตัว 5 หลัก (เช่น <code>23734</code>) หรือพิมพ์ชื่อ-นามสกุล เพื่อดูตารางสรุปสถานะการส่งงานทุกชิ้นได้ทันที</p>
+          </div>
+        </div>
+
+        <form onsubmit="handleDirectStudentSearch(event)" class="tracker-form">
+          <div class="tracker-input-group">
+            <div class="tracker-input-wrapper">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+              <input type="text" id="directStudentSearchInput" placeholder="กรอกรหัสนักเรียน 5 หลัก (เช่น 23734) หรือพิมพ์ชื่อ-นามสกุล..." autocomplete="off" required>
+            </div>
+            <button type="submit" class="btn btn-gold-accent btn-check-student">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"></path><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>
+              <span>ตรวจสอบการส่งงาน</span>
+            </button>
+          </div>
+          <div class="tracker-quick-hints">
+            <span class="hint-label">💡 ตัวอย่างรหัสนักเรียนทดสอบ:</span>
+            <button type="button" class="hint-chip" onclick="quickFillSearch('23734')">23734 (ม.5/1 นายธนโชติ)</button>
+            <button type="button" class="hint-chip" onclick="quickFillSearch('23769')">23769 (ม.5/2)</button>
+            <button type="button" class="hint-chip" onclick="quickFillSearch('23803')">23803 (ม.5/3)</button>
+          </div>
+        </form>
+
+        <!-- Inline Student Checklist Result Area -->
+        <div id="inlineStudentResult" style="display: none;" class="inline-student-result mt-4">
+          <!-- Populated dynamically with detailed Table -->
+        </div>
+      </div>
+
+
       <!-- Controls & Filter Bar -->
       <div class="section-header">
         <div class="section-title">
@@ -579,30 +619,8 @@
           </div>
         </div>
 
-        <!-- Student Profile Summary Card -->
-        <div class="student-portfolio-card" id="portfolioProfileCard">
-          <!-- Populated via JS -->
-        </div>
-
-        <!-- Progress Bar Card -->
-        <div class="portfolio-progress-card mt-3" id="portfolioProgressSection">
-          <div class="d-flex justify-between align-center mb-2">
-            <span class="font-weight-600 text-sm">ความคืบหน้าการส่งงานทั้งหมด</span>
-            <span class="badge badge-gold-glow" id="portfolioProgressText">ส่งแล้ว 0 / 0 งาน (0%)</span>
-          </div>
-          <div class="progress-bar-container">
-            <div class="progress-bar-fill school-progress" id="portfolioProgressBar" style="width: 0%;"></div>
-          </div>
-        </div>
-
-        <!-- Section Header -->
-        <div class="d-flex justify-between align-center mt-4 mb-2">
-          <h5 class="m-0 font-weight-700" style="font-size: 0.95rem; color: var(--slate-700);">📑 รายการชิ้นงานและการบ้านทั้งหมดในระบบ:</h5>
-          <span class="text-xs text-muted" id="portfolioClassroomLabel"></span>
-        </div>
-
-        <!-- Assignment List (Checklist items) -->
-        <div id="portfolioItemsContainer" class="portfolio-items-list">
+        <!-- Container for Portfolio Table & Profile -->
+        <div id="portfolioItemsContainer">
           <div class="text-center py-4 text-muted">กำลังโหลดข้อมูลชิ้นงาน...</div>
         </div>
       </div>
