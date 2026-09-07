@@ -11,6 +11,9 @@ require 'fileutils'
 require 'securerandom'
 require 'time'
 require 'cgi'
+require 'net/http'
+require 'base64'
+require 'uri'
 
 PORT = (ENV['PORT'] || 8080).to_i
 BASE_DIR = File.expand_path(__dir__)
@@ -30,6 +33,44 @@ FileUtils.mkdir_p(PUBLIC_DIR)
 db = SQLite3::Database.new(DB_PATH)
 db.results_as_hash = true
 $db = db
+
+# Background Auto-Sync Database to GitHub
+def sync_db_to_github
+  Thread.new do
+    begin
+      token = ENV['GITHUB_TOKEN']
+      repo = ENV['GITHUB_REPO'] || 'icelnwkill123/chiangyuen-assignment'
+      next if token.nil? || token.strip.empty? || !File.exist?(DB_PATH)
+
+      db_content = File.binread(DB_PATH)
+      b64_content = Base64.strict_encode64(db_content)
+
+      uri = URI("https://api.github.com/repos/#{repo}/contents/db/database.sqlite3")
+      headers = {
+        'Authorization' => "token #{token}",
+        'Accept' => 'application/vnd.github.v3+json',
+        'User-Agent' => 'ChiangYuen-Assignment-Server'
+      }
+
+      req = Net::HTTP::Get.new(uri, headers)
+      res = Net::HTTP.start(uri.host, uri.port, use_ssl: true) { |h| h.request(req) }
+      sha = (res.code == '200') ? JSON.parse(res.body)['sha'] : nil
+
+      put_req = Net::HTTP::Put.new(uri, headers)
+      payload = {
+        message: "Auto-backup database: #{Time.now.strftime('%Y-%m-%d %H:%M:%S')}",
+        content: b64_content
+      }
+      payload[:sha] = sha if sha
+      put_req.body = payload.to_json
+
+      put_res = Net::HTTP.start(uri.host, uri.port, use_ssl: true) { |h| h.request(put_req) }
+      puts "[Auto-Sync GitHub] Result: #{put_res.code}"
+    rescue => e
+      puts "[Auto-Sync GitHub Error] #{e.message}"
+    end
+  end
+end
 
 # Table: teacher_sessions (Persistent login across server restarts)
 db.execute <<-SQL
@@ -371,6 +412,16 @@ server.mount_proc '/api' do |req, res|
         send_error(res, 'ยังไม่ได้เข้าสู่ระบบอาจารย์', 401)
       end
 
+    when '/api/sync/github'
+      if method == 'POST'
+        unless check_teacher_auth(req)
+          send_error(res, 'กรุณาเข้าสู่ระบบด้วยรหัสผ่านอาจารย์ก่อนซิงค์ข้อมูล', 401)
+          next
+        end
+        sync_db_to_github
+        send_json(res, { success: true, message: 'ส่งคำสั่งสำรองฐานข้อมูลขึ้น GitHub ถาวรเรียบร้อยแล้ว' })
+      end
+
     # -----------------------------
     # 1. Statistics: GET /api/stats
     # -----------------------------
@@ -490,6 +541,7 @@ server.mount_proc '/api' do |req, res|
         )
         new_id = db.last_insert_row_id
         created = db.get_first_row('SELECT * FROM assignments WHERE id = ?', [new_id])
+        sync_db_to_github
         send_json(res, created, 201)
       end
 
@@ -800,6 +852,7 @@ server.mount_proc '/api' do |req, res|
           [title, subject, desc, due_date, max_score, allow_late, id]
         )
         updated = db.get_first_row('SELECT * FROM assignments WHERE id = ?', [id])
+        sync_db_to_github
         send_json(res, updated)
       elsif method == 'DELETE'
         unless check_teacher_auth(req)
@@ -809,6 +862,7 @@ server.mount_proc '/api' do |req, res|
 
         db.execute('DELETE FROM assignments WHERE id = ?', [id])
         db.execute('DELETE FROM submissions WHERE assignment_id = ?', [id])
+        sync_db_to_github
         send_json(res, { success: true, message: 'ลบงานเรียบร้อยแล้ว' })
       end
 
@@ -820,6 +874,7 @@ server.mount_proc '/api' do |req, res|
       id = Regexp.last_match(1).to_i
       db.execute('DELETE FROM assignments WHERE id = ?', [id])
       db.execute('DELETE FROM submissions WHERE assignment_id = ?', [id])
+      sync_db_to_github
       send_json(res, { success: true, message: 'ลบงานเรียบร้อยแล้ว' })
 
     # -----------------------------
