@@ -1349,12 +1349,93 @@ async function handleWorkSubmit(e) {
   }
 }
 
-// Student Tracking Modal
+// ==============================================
+// STUDENT SELF-CHECK & TRACKING SYSTEM
+// ==============================================
+
+// Direct search from Home Page Banner
+function quickFillSearch(studentId) {
+  const input = document.getElementById('directStudentSearchInput');
+  if (input) {
+    input.value = studentId;
+    executeDirectStudentSearch(studentId);
+  }
+}
+
+async function handleDirectStudentSearch(e) {
+  if (e) e.preventDefault();
+  const input = document.getElementById('directStudentSearchInput');
+  if (!input) return;
+  const val = input.value.trim();
+  if (!val) {
+    showToast('กรุณากรอกรหัสนักเรียน 5 หลัก หรือพิมพ์ชื่อ-นามสกุล', 'warning');
+    return;
+  }
+  executeDirectStudentSearch(val);
+}
+
+async function executeDirectStudentSearch(studentIdOrName, classroom = '') {
+  const resultDiv = document.getElementById('inlineStudentResult');
+  if (!resultDiv) return;
+
+  resultDiv.style.display = 'block';
+  resultDiv.innerHTML = `
+    <div class="text-center py-4 text-muted">
+      <div class="loading-spinner"></div>
+      <p class="mt-2">กำลังดึงข้อมูลและตารางสถานะการส่งงานของ "${escapeHtml(studentIdOrName)}"...</p>
+    </div>
+  `;
+
+  try {
+    const url = `/api/students/portfolio?student_id=${encodeURIComponent(studentIdOrName)}&classroom=${encodeURIComponent(classroom)}`;
+    const res = await fetch(url);
+    const data = await res.json();
+
+    if (!res.ok) {
+      resultDiv.innerHTML = `
+        <div class="alert alert-danger">
+          ⚠️ ${escapeHtml(data.error || 'ไม่พบข้อมูลนักเรียน กรุณาตรวจสอบรหัสนักเรียนอีกครั้ง')}
+        </div>
+      `;
+      return;
+    }
+
+    if (data.multiple) {
+      resultDiv.innerHTML = `
+        <div class="card p-4 text-center">
+          <h5>พบรายชื่อนักเรียนที่มีรหัสหรือชื่อตรงกัน ${data.candidates.length} คน</h5>
+          <p class="text-muted text-sm mt-1">กรุณาคลิกเลือกห้องเรียนของคุณ:</p>
+          <div class="d-flex justify-center gap-2 mt-3 flex-wrap">
+            ${data.candidates.map(c => `
+              <button class="btn btn-outline-success" onclick="executeDirectStudentSearch('${escapeHtml(c.student_id)}', '${escapeHtml(c.classroom)}')">
+                ห้อง ${escapeHtml(c.classroom)} - ${escapeHtml(c.name)} (เลขที่ ${c.student_number})
+              </button>
+            `).join('')}
+          </div>
+        </div>
+      `;
+      return;
+    }
+
+    resultDiv.innerHTML = buildSubmissionsTableHtml(data.student, data.items, data.stats, true);
+    
+    // Smooth scroll down to the table
+    setTimeout(() => {
+      resultDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }, 100);
+
+  } catch (err) {
+    console.error(err);
+    resultDiv.innerHTML = `<div class="alert alert-danger">เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์</div>`;
+  }
+}
+
+// Student Tracking Modal (Search Dialog)
 function openMySubmissionsModal() {
   document.getElementById('trackStudentIdInput').value = '';
   document.getElementById('mySubmissionsResults').innerHTML = `
     <div class="empty-state">
-      <p>กรุณากรอกรหัสประจำตัว หรือชื่อนักเรียน เพื่อเปิดดูประวัติและสถานะการส่งงานทุกชิ้น</p>
+      <p>กรุณากรอกรหัสประจำตัว หรือชื่อนักเรียน เพื่อเปิดดูตารางสรุปการส่งงานทุกชิ้น</p>
     </div>
   `;
   openModal('mySubmissionsModal');
@@ -1375,21 +1456,20 @@ async function openStudentPortfolioModal(studentId, classroom = '', justSubmitte
   if (!studentId) return;
 
   const successBanner = document.getElementById('portfolioSuccessBanner');
-  const profileCard = document.getElementById('portfolioProfileCard');
-  const progressText = document.getElementById('portfolioProgressText');
-  const progressBar = document.getElementById('portfolioProgressBar');
   const itemsContainer = document.getElementById('portfolioItemsContainer');
-  const classroomLabel = document.getElementById('portfolioClassroomLabel');
 
   // Reset modal state
   if (justSubmittedAssignmentId) {
-    successBanner.style.display = 'flex';
-    document.getElementById('portfolioSuccessMessage').textContent = 'บันทึกชิ้นงานและการส่งเข้าสู่ระบบแล้ว ตรวจสอบสถานะงานทั้งหมดด้านล่างได้เลย';
+    if (successBanner) {
+      successBanner.style.display = 'flex';
+      const msg = document.getElementById('portfolioSuccessMessage');
+      if (msg) msg.textContent = 'บันทึกชิ้นงานและการส่งเข้าสู่ระบบแล้ว ตรวจสอบตารางสถานะงานทั้งหมดด้านล่างได้เลย';
+    }
   } else {
-    successBanner.style.display = 'none';
+    if (successBanner) successBanner.style.display = 'none';
   }
 
-  itemsContainer.innerHTML = '<div class="text-center py-5 text-muted"><div class="spinner"></div> กำลังดึงข้อมูลประวัติการส่งงาน...</div>';
+  itemsContainer.innerHTML = '<div class="text-center py-5 text-muted"><div class="spinner"></div> กำลังดึงข้อมูลตารางสถานะการส่งงาน...</div>';
   openModal('studentPortfolioModal');
 
   try {
@@ -1403,7 +1483,6 @@ async function openStudentPortfolioModal(studentId, classroom = '', justSubmitte
     }
 
     if (data.multiple) {
-      // Multiple students matched
       itemsContainer.innerHTML = `
         <div class="card p-4 text-center">
           <h5>พบรายชื่อนักเรียนที่มีรหัสตรงกัน ${data.candidates.length} คน</h5>
@@ -1420,131 +1499,7 @@ async function openStudentPortfolioModal(studentId, classroom = '', justSubmitte
       return;
     }
 
-    const student = data.student;
-    const stats = data.stats;
-    const items = data.items;
-
-    // 1. Render Student Profile
-    profileCard.innerHTML = `
-      <div class="portfolio-student-info">
-        <div class="portfolio-avatar">${getAvatarInitials(student.name)}</div>
-        <div class="portfolio-details">
-          <h3>${escapeHtml(student.name)}</h3>
-          <div class="portfolio-meta-tags">
-            <span class="portfolio-tag tag-id">รหัส: <strong>${escapeHtml(student.student_id)}</strong></span>
-            <span class="portfolio-tag tag-classroom">ห้อง: <strong>${escapeHtml(student.classroom)}</strong></span>
-            <span class="portfolio-tag">เลขที่: <strong>${student.student_number || '-'}</strong></span>
-          </div>
-        </div>
-      </div>
-      <div class="text-right d-none-mobile">
-        <div style="font-size: 0.8rem; color: var(--slate-500);">คะแนนสะสมที่ได้</div>
-        <div style="font-size: 1.35rem; font-weight: 800; color: var(--school-green-dark);">
-          ${stats.total_score_earned} <span style="font-size: 0.85rem; font-weight: 500; color: var(--slate-400);">/ ${stats.total_max_score}</span>
-        </div>
-      </div>
-    `;
-
-    // 2. Render Progress Bar
-    const pct = stats.progress_pct || 0;
-    progressBar.style.width = `${pct}%`;
-    progressText.textContent = `ส่งแล้ว ${stats.submitted_count} / ${stats.total_assignments} งาน (${pct}%)`;
-
-    if (classroomLabel) {
-      classroomLabel.textContent = `นักเรียนห้อง ${student.classroom}`;
-    }
-
-    // 3. Render Items List
-    if (items.length === 0) {
-      itemsContainer.innerHTML = '<div class="text-center py-4 text-muted">ยังไม่มีรายการงานในระบบ</div>';
-      return;
-    }
-
-    itemsContainer.innerHTML = items.map((item, idx) => {
-      const isJustSubmitted = justSubmittedAssignmentId && item.assignment_id === justSubmittedAssignmentId;
-      const cardClass = item.submitted 
-        ? (isJustSubmitted ? 'portfolio-item-card is-just-submitted' : 'portfolio-item-card is-submitted')
-        : 'portfolio-item-card is-missing';
-
-      let statusBadgeHtml = '';
-      if (item.submitted) {
-        if (item.status === 'graded') {
-          statusBadgeHtml = `<span class="badge-status badge-graded">⭐ ตรวจแล้ว (${item.submission.score} / ${item.max_score} คะแนน)</span>`;
-        } else if (item.status === 'late') {
-          statusBadgeHtml = `<span class="badge-status badge-late">⏰ ส่งแล้ว (ส่งช้า)</span>`;
-        } else {
-          statusBadgeHtml = `<span class="badge-status badge-submitted">✅ ส่งงานเรียบร้อยแล้ว</span>`;
-        }
-      } else {
-        statusBadgeHtml = `<span class="badge-status badge-missing">❌ ยังไม่ได้ส่ง</span>`;
-      }
-
-      return `
-        <div class="${cardClass}">
-          <div class="portfolio-item-header">
-            <div>
-              <span class="portfolio-item-subject">${escapeHtml(item.subject)}</span>
-              <h4 class="portfolio-item-title mt-1">ชิ้นที่ ${idx + 1}: ${escapeHtml(item.title)}</h4>
-            </div>
-            <div>
-              ${statusBadgeHtml}
-            </div>
-          </div>
-
-          <div class="d-flex justify-between align-center text-sm" style="color: var(--slate-500);">
-            <div>
-              <span>กำหนดส่ง: <strong>${formatThaiDateTime(item.due_date)}</strong></span>
-              <span style="margin-left: 0.5rem;">| คะแนนเต็ม: <strong>${item.max_score} คะแนน</strong></span>
-            </div>
-            ${!item.submitted ? `
-              <button class="btn btn-sm btn-primary" onclick="closeModal('studentPortfolioModal'); openSubmitModal(${item.assignment_id}, '${escapeHtml(student.student_id)}', '${escapeHtml(student.classroom)}', '${escapeHtml(student.name)}')">
-                📤 ส่งงานนี้เลย
-              </button>
-            ` : ''}
-          </div>
-
-          ${item.submitted && item.submission ? `
-            <div class="portfolio-submission-info">
-              <div class="d-flex justify-between align-center">
-                <span>🕒 วันเวลาที่ส่ง: <strong>${formatThaiDateTime(item.submission.submitted_at)}</strong></span>
-                ${teacherToken ? `
-                  <div class="d-flex gap-1">
-                    <button class="btn btn-sm btn-outline-success" onclick="closeModal('studentPortfolioModal'); openGradeModalForStudent('${escapeHtml(student.student_id)}')">
-                      ✏️ ตรวจ/ให้คะแนน
-                    </button>
-                    <button class="btn btn-sm btn-outline-danger" onclick="deleteSubmissionFromPortfolio(${item.submission.id}, '${escapeHtml(student.name)}', '${escapeHtml(student.student_id)}', '${escapeHtml(student.classroom)}')" title="ลบงานนี้เพื่อให้นักเรียนส่งใหม่">
-                      🗑️ ลบงาน
-                    </button>
-                  </div>
-                ` : ''}
-              </div>
-
-              <div class="mt-2 d-flex gap-2 flex-wrap align-center">
-                ${item.submission.file_path ? `
-                  <a href="${item.submission.file_path}" target="_blank" class="portfolio-file-attachment">
-                    📄 <span>${escapeHtml(item.submission.file_name || 'ดาวน์โหลดไฟล์ผลงาน')}</span>
-                  </a>
-                ` : ''}
-                ${item.submission.submission_link ? `
-                  <a href="${item.submission.submission_link}" target="_blank" class="portfolio-file-attachment" style="color: var(--primary);">
-                    🔗 <span>เปิดดูผลงาน (${escapeHtml(item.submission.submission_link)})</span>
-                  </a>
-                ` : ''}
-                ${item.submission.note ? `
-                  <span class="text-xs text-muted">💬 บันทึก: "${escapeHtml(item.submission.note)}"</span>
-                ` : ''}
-              </div>
-
-              ${item.submission.feedback ? `
-                <div class="portfolio-feedback-box">
-                  <strong>💬 ความเห็น/คำติชมจากอาจารย์:</strong> ${escapeHtml(item.submission.feedback)}
-                </div>
-              ` : ''}
-            </div>
-          ` : ''}
-        </div>
-      `;
-    }).join('');
+    itemsContainer.innerHTML = buildSubmissionsTableHtml(data.student, data.items, data.stats, false);
 
   } catch (err) {
     console.error(err);
@@ -1552,16 +1507,192 @@ async function openStudentPortfolioModal(studentId, classroom = '', justSubmitte
   }
 }
 
-// Delete Submission from Portfolio View
-async function deleteSubmissionFromPortfolio(subId, studentName, studentId, classroom) {
+// Build Submissions Table HTML (Shared by inline tracker and modal)
+function buildSubmissionsTableHtml(student, items, stats, isInline = false) {
+  const pct = stats.progress_pct || 0;
+  const isAllDone = stats.submitted_count === stats.total_assignments && stats.total_assignments > 0;
+
+  return `
+    <div class="student-portfolio-card mb-3">
+      <div class="portfolio-student-info">
+        <div class="portfolio-avatar">${getAvatarInitials(student.name)}</div>
+        <div class="portfolio-details">
+          <h3>${escapeHtml(student.name)}</h3>
+          <div class="portfolio-meta-tags">
+            <span class="portfolio-tag tag-id">รหัสประจำตัว: <strong>${escapeHtml(student.student_id)}</strong></span>
+            <span class="portfolio-tag tag-classroom">ห้อง: <strong>${escapeHtml(student.classroom)}</strong></span>
+            <span class="portfolio-tag">เลขที่: <strong>${student.student_number || '-'}</strong></span>
+          </div>
+        </div>
+      </div>
+      <div class="text-right d-none-mobile">
+        <div style="font-size: 0.8rem; color: var(--slate-500);">คะแนนรวมสะสม</div>
+        <div style="font-size: 1.4rem; font-weight: 800; color: var(--school-green-dark);">
+          ${stats.total_score_earned} <span style="font-size: 0.85rem; font-weight: 500; color: var(--slate-400);">/ ${stats.total_max_score} คะแนน</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Progress Bar Card -->
+    <div class="portfolio-progress-card mb-3">
+      <div class="d-flex justify-between align-center mb-2">
+        <span class="font-weight-600 text-sm">ความคืบหน้าการส่งงานทั้งหมด</span>
+        <span class="badge ${isAllDone ? 'badge-submitted' : 'badge-gold-glow'}">
+          ${isAllDone ? '🎉 ส่งครบทุกงานแล้ว!' : `ส่งแล้ว ${stats.submitted_count} / ${stats.total_assignments} งาน (${pct}%)`}
+        </span>
+      </div>
+      <div class="progress-bar-container">
+        <div class="progress-bar-fill school-progress" style="width: ${pct}%;"></div>
+      </div>
+    </div>
+
+    <!-- The 5-Assignment Checklist Table -->
+    <div class="d-flex justify-between align-center mb-2 mt-3">
+      <h4 class="m-0 text-slate-800" style="font-size: 1rem; font-weight: 700;">
+        📋 ตารางสรุปสถานะการส่งงานรายบุคคล (${items.length} ชิ้นงาน):
+      </h4>
+      <span class="text-xs text-muted">ห้อง ${escapeHtml(student.classroom)}</span>
+    </div>
+
+    <div class="table-responsive" style="border: 1px solid var(--slate-200); border-radius: var(--radius); overflow-x: auto; background: #fff;">
+      <table class="data-table student-checklist-table" style="margin: 0;">
+        <thead>
+          <tr>
+            <th style="width: 50px;" class="text-center">ลำดับ</th>
+            <th style="min-width: 180px;">ชื่องาน / แบบฝึกหัด</th>
+            <th style="width: 130px;">กำหนดส่ง</th>
+            <th style="width: 130px;" class="text-center">สถานะ</th>
+            <th style="min-width: 160px;">วันเวลาที่ส่ง & ไฟล์งาน</th>
+            <th style="width: 90px;" class="text-center">คะแนน</th>
+            <th style="min-width: 140px;">คำติชมจากครู</th>
+            <th style="width: 150px;" class="text-center">การดำเนินการ</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${items.length === 0 ? '<tr><td colspan="8" class="text-center py-4 text-muted">ยังไม่มีรายการงานในระบบ</td></tr>' : items.map((item, idx) => {
+            const rowClass = item.submitted ? 'row-submitted' : 'row-missing';
+            
+            // Status badge
+            let statusHtml = '';
+            if (item.submitted) {
+              if (item.status === 'graded') {
+                statusHtml = `<span class="badge-status badge-graded">⭐ ตรวจแล้ว</span>`;
+              } else if (item.status === 'late') {
+                statusHtml = `<span class="badge-status badge-late">⏰ ส่งช้า</span>`;
+              } else {
+                statusHtml = `<span class="badge-status badge-submitted">✅ ส่งแล้ว</span>`;
+              }
+            } else {
+              statusHtml = `<span class="badge-status badge-missing">❌ ยังไม่ส่ง</span>`;
+            }
+
+            // File & Submission info
+            let subInfoHtml = '';
+            if (item.submitted && item.submission) {
+              subInfoHtml += `<div><small style="color: var(--slate-600);">🕒 ${formatThaiDateTime(item.submission.submitted_at)}</small></div>`;
+              if (item.submission.file_path) {
+                subInfoHtml += `
+                  <a href="${item.submission.file_path}" target="_blank" class="file-link-badge mt-1" download>
+                    📁 ${escapeHtml(item.submission.file_name || 'ดาวน์โหลดไฟล์')}
+                  </a>
+                `;
+              }
+              if (item.submission.submission_link) {
+                subInfoHtml += `
+                  <a href="${item.submission.submission_link}" target="_blank" class="file-link-badge mt-1" style="color: var(--primary);">
+                    🔗 ลิงก์แนบ
+                  </a>
+                `;
+              }
+              if (item.submission.note) {
+                subInfoHtml += `<div class="text-xs text-muted mt-1">"${escapeHtml(item.submission.note)}"</div>`;
+              }
+            } else {
+              subInfoHtml = `<span class="text-muted text-xs">- ยังไม่มีไฟล์ -</span>`;
+            }
+
+            // Score
+            let scoreHtml = '';
+            if (item.submitted && item.submission && item.submission.score !== null && item.submission.score !== undefined) {
+              scoreHtml = `<strong class="text-green-dark">${item.submission.score}</strong> <small class="text-muted">/ ${item.max_score}</small>`;
+            } else if (item.submitted) {
+              scoreHtml = `<span class="text-muted text-xs">รอตรวจ</span>`;
+            } else {
+              scoreHtml = `<span class="text-muted text-xs">-</span>`;
+            }
+
+            // Feedback
+            let feedbackHtml = '';
+            if (item.submitted && item.submission && item.submission.feedback) {
+              feedbackHtml = `<span class="teacher-feedback-cell">💬 ${escapeHtml(item.submission.feedback)}</span>`;
+            } else {
+              feedbackHtml = `<span class="text-muted text-xs">-</span>`;
+            }
+
+            // Actions
+            let actionHtml = '';
+            if (!item.submitted) {
+              actionHtml = `
+                <button class="btn btn-sm btn-primary" onclick="${isInline ? '' : 'closeModal(\\'studentPortfolioModal\\');'} openSubmitModal(${item.assignment_id}, '${escapeHtml(student.student_id)}', '${escapeHtml(student.classroom)}', '${escapeHtml(student.name)}', '${student.student_number || ''}')" title="กดส่งงานนี้">
+                  📤 ส่งงานนี้เลย
+                </button>
+              `;
+            } else {
+              if (teacherToken) {
+                actionHtml = `
+                  <div class="d-flex flex-column gap-1">
+                    <button class="btn btn-sm btn-outline-success" onclick="${isInline ? '' : 'closeModal(\\'studentPortfolioModal\\');'} openGradeModalForStudent('${escapeHtml(student.student_id)}')">
+                      ✏️ ตรวจงาน
+                    </button>
+                    <button class="btn btn-sm btn-danger" onclick="deleteIndividualSubmission(${item.submission.id}, '${escapeHtml(item.title)}', '${escapeHtml(student.name)}', '${escapeHtml(student.student_id)}', '${escapeHtml(student.classroom)}')" title="ลบเฉพาะงานนี้เพื่อให้นักเรียนส่งใหม่">
+                      🗑️ ลบงานนี้ (ให้ส่งใหม่)
+                    </button>
+                  </div>
+                `;
+              } else {
+                actionHtml = `<span class="badge badge-submitted" style="font-size: 0.78rem;">ส่งเรียบร้อย</span>`;
+              }
+            }
+
+            return `
+              <tr class="${rowClass}">
+                <td class="text-center"><strong>${idx + 1}</strong></td>
+                <td>
+                  <strong>${escapeHtml(item.title)}</strong>
+                  <div class="text-xs text-muted">${escapeHtml(item.subject)}</div>
+                </td>
+                <td><small>${formatThaiDateTime(item.due_date)}</small></td>
+                <td class="text-center">${statusHtml}</td>
+                <td>${subInfoHtml}</td>
+                <td class="text-center">${scoreHtml}</td>
+                <td>${feedbackHtml}</td>
+                <td class="text-center">${actionHtml}</td>
+              </tr>
+            `;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+// Delete Individual Submission (Only this assignment of this student is deleted)
+async function deleteIndividualSubmission(subId, assignmentTitle, studentName, studentId, classroom) {
   if (!teacherToken) {
     openTeacherLoginModal();
     return;
   }
 
-  if (!confirm(`⚠️ คุณครูต้องการลบการส่งงานของ "${studentName}" เพื่อให้นักเรียนส่งใหม่ใช่หรือไม่?\n\nเมื่อลบแล้ว นักเรียนจะสามารถส่งงานใหม่ได้ทันที`)) {
-    return;
-  }
+  const confirmMsg = `⚠️ ยืนยันการลบงานของนักเรียนรายบุคคล\n\n` +
+    `• นักเรียน: ${studentName} (ห้อง ${classroom})\n` +
+    `• งานที่ต้องการลบ: "${assignmentTitle}"\n\n` +
+    `📌 หมายเหตุสำคัญ:\n` +
+    `- จะลบ "เฉพาะงานชิ้นนี้ของนักเรียนคนนี้เท่านั้น"\n` +
+    `- งานชิ้นอื่นของนักเรียนคนนี้ และนักเรียนคนอื่นจะไม่ได้รับผลกระทบใดๆ ทั้งสิ้น\n` +
+    `- เมื่อลบแล้ว สถานะจะกลับเป็น "ยังไม่ส่ง" และนักเรียนจะสามารถส่งงานใหม่ได้ทันที\n\n` +
+    `คุณครูต้องการลบงานชิ้นนี้ใช่หรือไม่?`;
+
+  if (!confirm(confirmMsg)) return;
 
   try {
     const res = await fetch(`/api/submissions/${subId}/delete`, {
@@ -1571,10 +1702,21 @@ async function deleteSubmissionFromPortfolio(subId, studentName, studentId, clas
 
     const data = await res.json();
     if (res.ok && data.success) {
-      showToast('🗑️ ลบงานเรียบร้อยแล้ว นักเรียนสามารถส่งใหม่ได้ทันที', 'success');
-      // Refresh portfolio modal
-      openStudentPortfolioModal(studentId, classroom);
-      // Refresh background checklist if open
+      showToast(`🗑️ ลบงาน "${assignmentTitle}" ของ ${studentName} เรียบร้อยแล้ว (นักเรียนส่งใหม่ได้ทันที)`, 'success');
+
+      // Refresh inline search result if visible
+      const inlineDiv = document.getElementById('inlineStudentResult');
+      if (inlineDiv && inlineDiv.style.display !== 'none') {
+        executeDirectStudentSearch(studentId, classroom);
+      }
+
+      // Refresh modal if active
+      const modal = document.getElementById('studentPortfolioModal');
+      if (modal && modal.classList.contains('active')) {
+        openStudentPortfolioModal(studentId, classroom);
+      }
+
+      // Refresh teacher checklist table if active
       if (currentChecklistAssignmentId) {
         fetchChecklistData(currentChecklistAssignmentId, currentClassFilter);
       }
@@ -1586,6 +1728,7 @@ async function deleteSubmissionFromPortfolio(subId, studentName, studentId, clas
     showToast('เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์', 'error');
   }
 }
+
 
 
 // ==============================================
