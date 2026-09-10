@@ -103,76 +103,80 @@ $db = db
 # ----------------------------------------------------
 $sync_mutex = Mutex.new
 
-def sync_db_to_github
-  Thread.new do
-    $sync_mutex.synchronize do
-      begin
-        token = get_github_token
-        repo = get_github_repo
-        next if token.nil? || token.empty? || !File.exist?(DB_PATH)
+def sync_db_to_github_now
+  $sync_mutex.synchronize do
+    token = get_github_token
+    repo = get_github_repo
+    return { error: 'No GitHub token configured' } if token.nil? || token.empty?
+    return { error: 'Database file not found' } unless File.exist?(DB_PATH)
 
-        sleep 0.5 # Let SQLite transaction settle
+    sleep 0.3 # Brief pause for SQLite transaction
 
-        backup_path = "#{DB_PATH}.sync_tmp"
-        begin
-          if $db
-            b_db = SQLite3::Database.new(backup_path)
-            b = SQLite3::Backup.new(b_db, 'main', $db, 'main')
-            b.step(-1)
-            b.finish
-            b_db.close
-          else
-            FileUtils.cp(DB_PATH, backup_path)
-          end
-        rescue => _e
-          FileUtils.cp(DB_PATH, backup_path)
-        end
+    backup_path = "#{DB_PATH}.sync_tmp"
+    begin
+      if $db
+        b_db = SQLite3::Database.new(backup_path)
+        b = SQLite3::Backup.new(b_db, 'main', $db, 'main')
+        b.step(-1)
+        b.finish
+        b_db.close
+      else
+        FileUtils.cp(DB_PATH, backup_path)
+      end
+    rescue => _e
+      FileUtils.cp(DB_PATH, backup_path)
+    end
 
-        db_content = File.binread(backup_path)
-        FileUtils.rm_f(backup_path)
-        b64_content = Base64.strict_encode64(db_content)
+    db_content = File.binread(backup_path)
+    FileUtils.rm_f(backup_path)
+    b64_content = Base64.strict_encode64(db_content)
 
-        headers = {
-          'Authorization' => "token #{token}",
-          'Accept' => 'application/vnd.github.v3+json',
-          'User-Agent' => 'ChiangYuen-Assignment-Server'
-        }
+    headers = {
+      'Authorization' => "token #{token}",
+      'Accept' => 'application/vnd.github.v3+json',
+      'User-Agent' => 'ChiangYuen-Assignment-Server'
+    }
 
-        # Retry up to 3 times in case of concurrent commit SHA conflicts (409)
-        3.times do |attempt|
-          get_uri = URI("https://api.github.com/repos/#{repo}/contents/db/database.sqlite3?ref=#{STORAGE_BRANCH}")
-          get_req = Net::HTTP::Get.new(get_uri, headers)
-          get_res = Net::HTTP.start(get_uri.host, get_uri.port, use_ssl: true, open_timeout: 6, read_timeout: 12) { |h| h.request(get_req) }
-          sha = (get_res.code == '200') ? JSON.parse(get_res.body)['sha'] : nil
+    result = nil
+    3.times do |attempt|
+      get_uri = URI("https://api.github.com/repos/#{repo}/contents/db/database.sqlite3?ref=#{STORAGE_BRANCH}")
+      get_req = Net::HTTP::Get.new(get_uri, headers)
+      get_res = Net::HTTP.start(get_uri.host, get_uri.port, use_ssl: true, open_timeout: 6, read_timeout: 12) { |h| h.request(get_req) }
+      sha = (get_res.code == '200') ? JSON.parse(get_res.body)['sha'] : nil
 
-          put_uri = URI("https://api.github.com/repos/#{repo}/contents/db/database.sqlite3")
-          put_req = Net::HTTP::Put.new(put_uri, headers)
-          payload = {
-            message: "Auto-backup database [branch:#{STORAGE_BRANCH}]: #{Time.now.strftime('%Y-%m-%d %H:%M:%S')}",
-            content: b64_content,
-            branch: STORAGE_BRANCH
-          }
-          payload[:sha] = sha if sha
-          put_req.body = payload.to_json
+      put_uri = URI("https://api.github.com/repos/#{repo}/contents/db/database.sqlite3")
+      put_req = Net::HTTP::Put.new(put_uri, headers)
+      payload = {
+        message: "Auto-backup database [branch:#{STORAGE_BRANCH}]: #{Time.now.strftime('%Y-%m-%d %H:%M:%S')}",
+        content: b64_content,
+        branch: STORAGE_BRANCH
+      }
+      payload[:sha] = sha if sha
+      put_req.body = payload.to_json
 
-          put_res = Net::HTTP.start(put_uri.host, put_uri.port, use_ssl: true, open_timeout: 6, read_timeout: 15) { |h| h.request(put_req) }
+      put_res = Net::HTTP.start(put_uri.host, put_uri.port, use_ssl: true, open_timeout: 8, read_timeout: 15) { |h| h.request(put_req) }
+      result = { code: put_res.code, attempt: attempt + 1, message: (put_res.code =~ /^2/ ? 'Success' : put_res.body[0..150]) }
 
-          if put_res.code =~ /^2/
-            puts "[Auto-Sync GitHub DB] ✅ Saved to branch '#{STORAGE_BRANCH}' (Attempt #{attempt + 1}, HTTP #{put_res.code})"
-            break
-          elsif put_res.code == '409' && attempt < 2
-            puts "[Auto-Sync GitHub DB] ⚠️ 409 Conflict on attempt #{attempt + 1}, retrying with fresh SHA..."
-            sleep 1.0
-          else
-            puts "[Auto-Sync GitHub DB] Result: #{put_res.code} - #{put_res.body[0..120]}"
-            break
-          end
-        end
-      rescue => e
-        puts "[Auto-Sync GitHub DB Error] #{e.message}"
+      if put_res.code =~ /^2/
+        puts "[Auto-Sync GitHub DB] ✅ Saved to branch '#{STORAGE_BRANCH}' (Attempt #{attempt + 1}, HTTP #{put_res.code})"
+        return result
+      elsif put_res.code == '409' && attempt < 2
+        puts "[Auto-Sync GitHub DB] ⚠️ 409 Conflict on attempt #{attempt + 1}, retrying..."
+        sleep 1.0
+      else
+        puts "[Auto-Sync GitHub DB] Result: #{put_res.code} - #{put_res.body[0..120]}"
+        return result
       end
     end
+    result
+  rescue => e
+    puts "[Auto-Sync GitHub DB Error] #{e.message}"
+    { error: "#{e.class}: #{e.message}" }
   end
+end
+
+def sync_db_to_github
+  Thread.new { sync_db_to_github_now }
 end
 
 # ----------------------------------------------------
@@ -613,9 +617,49 @@ server.mount_proc '/api' do |req, res|
           send_error(res, 'กรุณาเข้าสู่ระบบด้วยรหัสผ่านอาจารย์ก่อนซิงค์ข้อมูล', 401)
           next
         end
-        sync_db_to_github
-        send_json(res, { success: true, message: 'ส่งคำสั่งสำรองฐานข้อมูลขึ้น GitHub ถาวรเรียบร้อยแล้ว' })
+        result = sync_db_to_github_now
+        send_json(res, { success: true, message: 'ส่งคำสั่งสำรองฐานข้อมูลขึ้น GitHub ถาวรเรียบร้อยแล้ว', result: result })
       end
+
+    when '/api/debug/sync'
+      unless check_teacher_auth(req)
+        send_error(res, 'กรุณาเข้าสู่ระบบด้วยรหัสผ่านอาจารย์', 401)
+        next
+      end
+
+      token = get_github_token
+      repo = get_github_repo
+
+      diag = {
+        token_present: (!token.nil? && !token.empty?),
+        token_prefix: token.to_s[0..7],
+        token_length: token.to_s.length,
+        repo: repo,
+        storage_branch: STORAGE_BRANCH,
+        db_exists: File.exist?(DB_PATH),
+        db_size: (File.exist?(DB_PATH) ? File.size(DB_PATH) : 0),
+        students_count: db.get_first_value('SELECT COUNT(*) FROM students'),
+        assignments_count: db.get_first_value('SELECT COUNT(*) FROM assignments'),
+        submissions_count: db.get_first_value('SELECT COUNT(*) FROM submissions')
+      }
+
+      begin
+        headers = {
+          'Authorization' => "token #{token}",
+          'Accept' => 'application/vnd.github.v3+json',
+          'User-Agent' => 'ChiangYuen-Assignment-Server'
+        }
+        uri = URI("https://api.github.com/repos/#{repo}/contents/db/database.sqlite3?ref=#{STORAGE_BRANCH}")
+        http_req = Net::HTTP::Get.new(uri, headers)
+        http_res = Net::HTTP.start(uri.host, uri.port, use_ssl: true, open_timeout: 6, read_timeout: 10) { |h| h.request(http_req) }
+        diag[:github_get_status] = http_res.code
+        diag[:github_get_sha] = (http_res.code == '200') ? JSON.parse(http_res.body)['sha'] : nil
+        diag[:github_get_body] = http_res.body[0..200] if http_res.code != '200'
+      rescue => err
+        diag[:github_error] = "#{err.class}: #{err.message}"
+      end
+
+      send_json(res, diag)
 
     # -----------------------------
     # 1. Statistics: GET /api/stats
