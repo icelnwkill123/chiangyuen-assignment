@@ -1633,7 +1633,7 @@ function buildSubmissionsTableHtml(student, items, stats, isInline = false) {
             let actionHtml = '';
             if (!item.submitted) {
               actionHtml = `
-                <button class="btn btn-sm btn-primary" onclick="${isInline ? '' : 'closeModal(\\'studentPortfolioModal\\');'} openSubmitModal(${item.assignment_id}, '${escapeHtml(student.student_id)}', '${escapeHtml(student.classroom)}', '${escapeHtml(student.name)}', '${student.student_number || ''}')" title="กดส่งงานนี้">
+                <button class="btn btn-sm btn-primary" onclick="submitFromPortfolio(${item.assignment_id}, '${escapeHtml(student.student_id)}', '${escapeHtml(student.classroom)}', '${escapeHtml(student.name)}', '${student.student_number || ''}')" title="กดส่งงานนี้">
                   📤 ส่งงานนี้เลย
                 </button>
               `;
@@ -1641,7 +1641,7 @@ function buildSubmissionsTableHtml(student, items, stats, isInline = false) {
               if (teacherToken) {
                 actionHtml = `
                   <div class="d-flex flex-column gap-1">
-                    <button class="btn btn-sm btn-outline-success" onclick="${isInline ? '' : 'closeModal(\\'studentPortfolioModal\\');'} openGradeModalForStudent('${escapeHtml(student.student_id)}')">
+                    <button class="btn btn-sm btn-outline-success" onclick="gradeFromPortfolio('${escapeHtml(student.student_id)}')">
                       ✏️ ตรวจงาน
                     </button>
                     <button class="btn btn-sm btn-danger" onclick="deleteIndividualSubmission(${item.submission.id}, '${escapeHtml(item.title)}', '${escapeHtml(student.name)}', '${escapeHtml(student.student_id)}', '${escapeHtml(student.classroom)}')" title="ลบเฉพาะงานนี้เพื่อให้นักเรียนส่งใหม่">
@@ -1727,6 +1727,16 @@ async function deleteIndividualSubmission(subId, assignmentTitle, studentName, s
     console.error(err);
     showToast('เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์', 'error');
   }
+}
+
+function submitFromPortfolio(assignmentId, sid, cls, name, num) {
+  closeModal('studentPortfolioModal');
+  openSubmitModal(assignmentId, sid, cls, name, num);
+}
+
+function gradeFromPortfolio(sid) {
+  closeModal('studentPortfolioModal');
+  openGradeModalForStudent(sid);
 }
 
 
