@@ -26,6 +26,7 @@ TEACHER_PASSWORD = ENV['TEACHER_PASSWORD'] || '021047'
 TEACHER_SESSIONS = {}
 
 DEFAULT_GITHUB_REPO = 'icelnwkill123/chiangyuen-assignment'
+STORAGE_BRANCH = 'data'
 
 def get_github_token
   t = ENV['GITHUB_TOKEN']
@@ -52,31 +53,41 @@ def pull_db_from_github
   repo = get_github_repo
   return if token.nil? || token.empty?
 
-  puts "[GitHub Boot Sync] Checking latest database from GitHub (#{repo})..."
-  uri = URI("https://api.github.com/repos/#{repo}/contents/db/database.sqlite3")
+  puts "[GitHub Boot Sync] Checking latest database from GitHub branch '#{STORAGE_BRANCH}' (#{repo})..."
   headers = {
     'Authorization' => "token #{token}",
     'Accept' => 'application/vnd.github.v3+json',
     'User-Agent' => 'ChiangYuen-Assignment-Server'
   }
 
-  req = Net::HTTP::Get.new(uri, headers)
-  res = Net::HTTP.start(uri.host, uri.port, use_ssl: true, open_timeout: 6, read_timeout: 12) { |h| h.request(req) }
+  [STORAGE_BRANCH, 'main'].each do |br|
+    begin
+      uri = URI("https://api.github.com/repos/#{repo}/contents/db/database.sqlite3?ref=#{br}")
+      req = Net::HTTP::Get.new(uri, headers)
+      res = Net::HTTP.start(uri.host, uri.port, use_ssl: true, open_timeout: 8, read_timeout: 15) { |h| h.request(req) }
 
-  if res.code == '200'
-    data = JSON.parse(res.body)
-    if data['content']
-      content = Base64.decode64(data['content'])
-      if content.size > 5000
-        File.binwrite(DB_PATH, content)
-        puts "[GitHub Boot Sync] ✅ Successfully loaded database (#{content.size} bytes) from GitHub!"
+      if res.code == '200'
+        data = JSON.parse(res.body)
+        content = nil
+        if data['content']
+          content = Base64.decode64(data['content'])
+        elsif data['download_url']
+          d_res = Net::HTTP.get_response(URI(data['download_url']))
+          content = d_res.body if d_res.code == '200'
+        end
+
+        if content && content.size > 5000
+          File.binwrite(DB_PATH, content)
+          puts "[GitHub Boot Sync] ✅ Successfully loaded database (#{content.size} bytes) from branch '#{br}'!"
+          break
+        end
+      else
+        puts "[GitHub Boot Sync] Branch '#{br}' status: HTTP #{res.code}"
       end
+    rescue => e
+      puts "[GitHub Boot Sync Error on #{br}] #{e.message}"
     end
-  else
-    puts "[GitHub Boot Sync] GitHub status: HTTP #{res.code}"
   end
-rescue => e
-  puts "[GitHub Boot Sync Error] #{e.message}"
 end
 
 # Pull database from GitHub before initializing SQLite connection
@@ -88,7 +99,7 @@ db.results_as_hash = true
 $db = db
 
 # ----------------------------------------------------
-# 2. Database Auto-Sync to GitHub (Two-Way Persistence)
+# 2. Database Auto-Sync to GitHub (Branch 'data' - Zero Render Redeploy Loop)
 # ----------------------------------------------------
 $sync_mutex = Mutex.new
 
@@ -100,32 +111,63 @@ def sync_db_to_github
         repo = get_github_repo
         next if token.nil? || token.empty? || !File.exist?(DB_PATH)
 
-        sleep 0.8 # Let SQLite finish disk write
+        sleep 0.5 # Let SQLite transaction settle
 
-        db_content = File.binread(DB_PATH)
+        backup_path = "#{DB_PATH}.sync_tmp"
+        begin
+          if $db
+            b_db = SQLite3::Database.new(backup_path)
+            b = SQLite3::Backup.new(b_db, 'main', $db, 'main')
+            b.step(-1)
+            b.finish
+            b_db.close
+          else
+            FileUtils.cp(DB_PATH, backup_path)
+          end
+        rescue => _e
+          FileUtils.cp(DB_PATH, backup_path)
+        end
+
+        db_content = File.binread(backup_path)
+        FileUtils.rm_f(backup_path)
         b64_content = Base64.strict_encode64(db_content)
 
-        uri = URI("https://api.github.com/repos/#{repo}/contents/db/database.sqlite3")
         headers = {
           'Authorization' => "token #{token}",
           'Accept' => 'application/vnd.github.v3+json',
           'User-Agent' => 'ChiangYuen-Assignment-Server'
         }
 
-        req = Net::HTTP::Get.new(uri, headers)
-        res = Net::HTTP.start(uri.host, uri.port, use_ssl: true, open_timeout: 5, read_timeout: 10) { |h| h.request(req) }
-        sha = (res.code == '200') ? JSON.parse(res.body)['sha'] : nil
+        # Retry up to 3 times in case of concurrent commit SHA conflicts (409)
+        3.times do |attempt|
+          get_uri = URI("https://api.github.com/repos/#{repo}/contents/db/database.sqlite3?ref=#{STORAGE_BRANCH}")
+          get_req = Net::HTTP::Get.new(get_uri, headers)
+          get_res = Net::HTTP.start(get_uri.host, get_uri.port, use_ssl: true, open_timeout: 6, read_timeout: 12) { |h| h.request(get_req) }
+          sha = (get_res.code == '200') ? JSON.parse(get_res.body)['sha'] : nil
 
-        put_req = Net::HTTP::Put.new(uri, headers)
-        payload = {
-          message: "Auto-backup database: #{Time.now.strftime('%Y-%m-%d %H:%M:%S')}",
-          content: b64_content
-        }
-        payload[:sha] = sha if sha
-        put_req.body = payload.to_json
+          put_uri = URI("https://api.github.com/repos/#{repo}/contents/db/database.sqlite3")
+          put_req = Net::HTTP::Put.new(put_uri, headers)
+          payload = {
+            message: "Auto-backup database [branch:#{STORAGE_BRANCH}]: #{Time.now.strftime('%Y-%m-%d %H:%M:%S')}",
+            content: b64_content,
+            branch: STORAGE_BRANCH
+          }
+          payload[:sha] = sha if sha
+          put_req.body = payload.to_json
 
-        put_res = Net::HTTP.start(uri.host, uri.port, use_ssl: true, open_timeout: 5, read_timeout: 10) { |h| h.request(put_req) }
-        puts "[Auto-Sync GitHub DB] Result: #{put_res.code}"
+          put_res = Net::HTTP.start(put_uri.host, put_uri.port, use_ssl: true, open_timeout: 6, read_timeout: 15) { |h| h.request(put_req) }
+
+          if put_res.code =~ /^2/
+            puts "[Auto-Sync GitHub DB] ✅ Saved to branch '#{STORAGE_BRANCH}' (Attempt #{attempt + 1}, HTTP #{put_res.code})"
+            break
+          elsif put_res.code == '409' && attempt < 2
+            puts "[Auto-Sync GitHub DB] ⚠️ 409 Conflict on attempt #{attempt + 1}, retrying with fresh SHA..."
+            sleep 1.0
+          else
+            puts "[Auto-Sync GitHub DB] Result: #{put_res.code} - #{put_res.body[0..120]}"
+            break
+          end
+        end
       rescue => e
         puts "[Auto-Sync GitHub DB Error] #{e.message}"
       end
@@ -147,27 +189,29 @@ def sync_file_to_github(disk_path, fname)
       next if content.size > 25 * 1024 * 1024 # Skip files > 25MB
 
       b64 = Base64.strict_encode64(content)
-      uri = URI("https://api.github.com/repos/#{repo}/contents/uploads/#{URI.encode_www_form_component(fname)}")
       headers = {
         'Authorization' => "token #{token}",
         'Accept' => 'application/vnd.github.v3+json',
         'User-Agent' => 'ChiangYuen-Assignment-Server'
       }
 
-      get_req = Net::HTTP::Get.new(uri, headers)
-      get_res = Net::HTTP.start(uri.host, uri.port, use_ssl: true, open_timeout: 5, read_timeout: 10) { |h| h.request(get_req) }
+      get_uri = URI("https://api.github.com/repos/#{repo}/contents/uploads/#{URI.encode_www_form_component(fname)}?ref=#{STORAGE_BRANCH}")
+      get_req = Net::HTTP::Get.new(get_uri, headers)
+      get_res = Net::HTTP.start(get_uri.host, get_uri.port, use_ssl: true, open_timeout: 5, read_timeout: 10) { |h| h.request(get_req) }
       sha = (get_res.code == '200') ? JSON.parse(get_res.body)['sha'] : nil
 
-      put_req = Net::HTTP::Put.new(uri, headers)
+      put_uri = URI("https://api.github.com/repos/#{repo}/contents/uploads/#{URI.encode_www_form_component(fname)}")
+      put_req = Net::HTTP::Put.new(put_uri, headers)
       payload = {
-        message: "Upload submission file: #{fname}",
-        content: b64
+        message: "Upload student submission file: #{fname}",
+        content: b64,
+        branch: STORAGE_BRANCH
       }
       payload[:sha] = sha if sha
       put_req.body = payload.to_json
 
-      put_res = Net::HTTP.start(uri.host, uri.port, use_ssl: true, open_timeout: 5, read_timeout: 10) { |h| h.request(put_req) }
-      puts "[GitHub File Upload] #{fname} => #{put_res.code}"
+      put_res = Net::HTTP.start(put_uri.host, put_uri.port, use_ssl: true, open_timeout: 6, read_timeout: 15) { |h| h.request(put_req) }
+      puts "[GitHub File Upload] #{fname} => #{put_res.code} (branch: #{STORAGE_BRANCH})"
     rescue => e
       puts "[GitHub File Upload Error] #{e.message}"
     end
@@ -182,23 +226,36 @@ def ensure_file_from_github(fname)
   repo = get_github_repo
   return disk_path if token.nil? || token.empty?
 
-  uri = URI("https://api.github.com/repos/#{repo}/contents/uploads/#{URI.encode_www_form_component(fname)}")
   headers = {
     'Authorization' => "token #{token}",
     'Accept' => 'application/vnd.github.v3+json',
     'User-Agent' => 'ChiangYuen-Assignment-Server'
   }
-  req = Net::HTTP::Get.new(uri, headers)
-  res = Net::HTTP.start(uri.host, uri.port, use_ssl: true, open_timeout: 5, read_timeout: 10) { |h| h.request(req) }
 
-  if res.code == '200'
-    data = JSON.parse(res.body)
-    if data['content']
-      FileUtils.mkdir_p(UPLOADS_DIR)
-      File.binwrite(disk_path, Base64.decode64(data['content']))
-      puts "[GitHub File Restore] Downloaded missing file #{fname} from GitHub!"
+  [STORAGE_BRANCH, 'main'].each do |br|
+    uri = URI("https://api.github.com/repos/#{repo}/contents/uploads/#{URI.encode_www_form_component(fname)}?ref=#{br}")
+    req = Net::HTTP::Get.new(uri, headers)
+    res = Net::HTTP.start(uri.host, uri.port, use_ssl: true, open_timeout: 6, read_timeout: 15) { |h| h.request(req) }
+
+    if res.code == '200'
+      data = JSON.parse(res.body)
+      content = nil
+      if data['content']
+        content = Base64.decode64(data['content'])
+      elsif data['download_url']
+        d_res = Net::HTTP.get_response(URI(data['download_url']))
+        content = d_res.body if d_res.code == '200'
+      end
+
+      if content
+        FileUtils.mkdir_p(UPLOADS_DIR)
+        File.binwrite(disk_path, content)
+        puts "[GitHub File Restore] Downloaded #{fname} from branch '#{br}'!"
+        return disk_path
+      end
     end
   end
+
   disk_path
 rescue => e
   puts "[GitHub File Restore Error] #{e.message}"
@@ -212,21 +269,26 @@ def delete_file_from_github(fname)
       repo = get_github_repo
       next if token.nil? || token.empty? || fname.nil? || fname.empty?
 
-      uri = URI("https://api.github.com/repos/#{repo}/contents/uploads/#{URI.encode_www_form_component(fname)}")
       headers = {
         'Authorization' => "token #{token}",
         'Accept' => 'application/vnd.github.v3+json',
         'User-Agent' => 'ChiangYuen-Assignment-Server'
       }
 
-      req = Net::HTTP::Get.new(uri, headers)
-      res = Net::HTTP.start(uri.host, uri.port, use_ssl: true, open_timeout: 5, read_timeout: 10) { |h| h.request(req) }
+      uri = URI("https://api.github.com/repos/#{repo}/contents/uploads/#{URI.encode_www_form_component(fname)}?ref=#{STORAGE_BRANCH}")
+      get_req = Net::HTTP::Get.new(uri, headers)
+      res = Net::HTTP.start(uri.host, uri.port, use_ssl: true, open_timeout: 5, read_timeout: 10) { |h| h.request(get_req) }
       if res.code == '200'
         sha = JSON.parse(res.body)['sha']
-        del_req = Net::HTTP::Delete.new(uri, headers)
-        del_req.body = { message: "Delete submission file: #{fname}", sha: sha }.to_json
-        del_res = Net::HTTP.start(uri.host, uri.port, use_ssl: true, open_timeout: 5, read_timeout: 10) { |h| h.request(del_req) }
-        puts "[GitHub File Delete] #{fname} => #{del_res.code}"
+        del_uri = URI("https://api.github.com/repos/#{repo}/contents/uploads/#{URI.encode_www_form_component(fname)}")
+        del_req = Net::HTTP::Delete.new(del_uri, headers)
+        del_req.body = {
+          message: "Delete submission file: #{fname}",
+          sha: sha,
+          branch: STORAGE_BRANCH
+        }.to_json
+        del_res = Net::HTTP.start(del_uri.host, del_uri.port, use_ssl: true, open_timeout: 5, read_timeout: 10) { |h| h.request(del_req) }
+        puts "[GitHub File Delete] #{fname} => #{del_res.code} (branch: #{STORAGE_BRANCH})"
       end
     rescue => e
       puts "[GitHub File Delete Error] #{e.message}"
@@ -298,88 +360,58 @@ SQL
 db.execute('CREATE INDEX IF NOT EXISTS idx_students_sid ON students(student_id)')
 db.execute('CREATE INDEX IF NOT EXISTS idx_students_cls ON students(classroom)')
 
-# Seed sample students if empty
+# Seed students if empty
 students_count = db.get_first_value('SELECT COUNT(*) FROM students')
 if students_count == 0
-  sample_students = [
-    # ม.5/1
-    ['664324', 1, 'นายอนุชา พันธุกูล', 'ม.5/1'],
-    ['6601001', 2, 'นายกรวิชญ์ สุขเกษม', 'ม.5/1'],
-    ['6601002', 3, 'นายกิตติภูมิ ทรัพย์เจริญ', 'ม.5/1'],
-    ['6601003', 4, 'นายชยพล วิริยะพงศ์', 'ม.5/1'],
-    ['6601004', 5, 'นายณัฐดนัย รุ่งโรจน์', 'ม.5/1'],
-    ['6601005', 6, 'นางสาวกานต์พิชชา วงศ์สุวรรณ', 'ม.5/1'],
-    ['6601006', 7, 'นางสาวจิรภิญญา พงษ์ศิริ', 'ม.5/1'],
-    ['6601007', 8, 'นางสาวชลธิชา บุญรัตน์', 'ม.5/1'],
-    ['6601008', 9, 'นางสาวณิชากร เตชะวัฒน์', 'ม.5/1'],
-    ['6601009', 10, 'นางสาวธนภรณ์ เลิศวิริยะ', 'ม.5/1'],
-    ['6601010', 11, 'นายนพรัตน์ แสงทอง', 'ม.5/1'],
-    # ม.5/2
-    ['64010567', 1, 'นางสาวกานดา รักเรียน', 'ม.5/2'],
-    ['6602001', 2, 'นายธนกฤต มั่งคั่ง', 'ม.5/2'],
-    ['6602002', 3, 'นายธีรภัทร อัศวกร', 'ม.5/2'],
-    ['6602003', 4, 'นายพงศกร ชินวัตร', 'ม.5/2'],
-    ['6602004', 5, 'นางสาวพิชามญชุ์ บวรชัย', 'ม.5/2'],
-    ['6602005', 6, 'นางสาววรัญญา เกษมสุข', 'ม.5/2'],
-    ['6602006', 7, 'นางสาวศศิภา ศิริสวัสดิ์', 'ม.5/2'],
-    # ม.5/3
-    ['6603001', 1, 'นายกฤษณะ กุลวงศ์', 'ม.5/3'],
-    ['6603002', 2, 'นายจตุรภัทร บุญเสริม', 'ม.5/3'],
-    ['6603003', 3, 'นายชาญวิทย์ วงศ์สว่าง', 'ม.5/3'],
-    ['6603004', 4, 'นางสาวทิพวรรณ ศรีสุข', 'ม.5/3'],
-    ['6603005', 5, 'นางสาวปวีณา อุดมทรัพย์', 'ม.5/3'],
-    # ม.5/4
-    ['6604001', 1, 'นายปฏิภาณ ตั้งมั่น', 'ม.5/4'],
-    ['6604002', 2, 'นายภัทรดนัย บุญมี', 'ม.5/4'],
-    ['6604003', 3, 'นางสาวมณฑิรา สว่างจิตต์', 'ม.5/4'],
-    ['6604004', 4, 'นางสาวรัตนาภรณ์ พุ่มแก้ว', 'ม.5/4'],
-    ['6604005', 5, 'นายศิรวิชญ์ พิทักษ์ไทย', 'ม.5/4'],
-    # ม.5/5
-    ['6605001', 1, 'นายกมลศักดิ์ เจริญพร', 'ม.5/5'],
-    ['6605002', 2, 'นายนันทวัฒน์ ชัยรัตน์', 'ม.5/5'],
-    ['6605003', 3, 'นางสาวพิมพ์พิชชา ทรงคุณ', 'ม.5/5'],
-    ['6605004', 4, 'นางสาวลลิตา สมหวัง', 'ม.5/5'],
-    ['6605005', 5, 'นายอภิสิทธิ์ เพ็ญศิริ', 'ม.5/5'],
-    # ม.5/6
-    ['6606001', 1, 'นายชวลิต วิบูลย์กุล', 'ม.5/6'],
-    ['6606002', 2, 'นายทศพล มงคลชัย', 'ม.5/6'],
-    ['6606003', 3, 'นางสาวนลินทิพย์ ยอดแก้ว', 'ม.5/6'],
-    ['6606004', 4, 'นางสาวพิมพาภรณ์ เรืองเดช', 'ม.5/6'],
-    ['6606005', 5, 'นายวรเมธ คงเจริญ', 'ม.5/6'],
-    # ม.5/7
-    ['6607001', 1, 'นายก้องภพ ปรีชาชาญ', 'ม.5/7'],
-    ['6607002', 2, 'นายปัณณธร พัฒนกิจ', 'ม.5/7'],
-    ['6607003', 3, 'นางสาวศศิธร สุขสมบูรณ์', 'ม.5/7'],
-    ['6607004', 4, 'นางสาวอรัญญา ทรัพย์สิน', 'ม.5/7'],
-    ['6607005', 5, 'นายเอกภพ ดำรงศักดิ์', 'ม.5/7'],
-    # ม.5/8
-    ['6608001', 1, 'นายจิรายุ ธรรมนูญ', 'ม.5/8'],
-    ['6608002', 2, 'นายธนเดช ธราดล', 'ม.5/8'],
-    ['6608003', 3, 'นางสาวปาลิตา มหานคร', 'ม.5/8'],
-    ['6608004', 4, 'นางสาวสิริพร สุวรรณฉวี', 'ม.5/8'],
-    ['6608005', 5, 'นายอานนท์ ฤทธิรงค์', 'ม.5/8']
-  ]
-  sample_students.each do |std|
-    db.execute('INSERT OR IGNORE INTO students (student_id, student_number, name, classroom) VALUES (?, ?, ?, ?)', std)
+  seed_file = File.join(BASE_DIR, 'db', 'students_seed.json')
+  if File.exist?(seed_file)
+    begin
+      std_list = JSON.parse(File.read(seed_file))
+      db.transaction do
+        std_list.each do |s|
+          db.execute(
+            'INSERT OR IGNORE INTO students (student_id, student_number, name, classroom) VALUES (?, ?, ?, ?)',
+            [s['student_id'].to_s, s['student_number'].to_i, s['name'].to_s, s['classroom'].to_s]
+          )
+        end
+      end
+      puts "Seeded #{std_list.size} students from #{seed_file}."
+    rescue => err
+      puts "Failed to load students_seed.json: #{err.message}"
+    end
   end
-  puts "Seeded #{sample_students.size} sample Thai students across 8 rooms (ม.5/1 - ม.5/8)."
+
+  # Fallback if seed file didn't exist or was empty
+  if db.get_first_value('SELECT COUNT(*) FROM students') == 0
+    sample_students = [
+      ['664324', 99, 'นายอนุชา พันธุกูล (บัญชีทดสอบ)', 'ม.5/1'],
+      ['23734', 1, 'นายธนโชติ แสนไชย', 'ม.5/1']
+    ]
+    sample_students.each do |std|
+      db.execute('INSERT OR IGNORE INTO students (student_id, student_number, name, classroom) VALUES (?, ?, ?, ?)', std)
+    end
+  end
 end
 
-# Insert sample assignments if empty
+# Insert teacher's 5 assignments if empty
 count = db.get_first_value('SELECT COUNT(*) FROM assignments')
 if count == 0
-  tomorrow = (Time.now + 86400 * 3).strftime('%Y-%m-%dT23:59')
-  next_week = (Time.now + 86400 * 7).strftime('%Y-%m-%dT23:59')
-  
-  db.execute(
-    'INSERT INTO assignments (title, subject, description, due_date, max_score, allow_late) VALUES (?, ?, ?, ?, ?, ?)',
-    ['การบ้านชิ้นที่ 1: การออกแบบฐานข้อมูลเชิงสัมพันธ์', 'Database Systems', 'ให้ออกแบบ ER Diagram และ Normalized Database Schema ในรูปแบบ PDF พร้อมอธิบายความสัมพันธ์แบบ 1:M และ M:N', tomorrow, 20.0, 1]
-  )
-  db.execute(
-    'INSERT INTO assignments (title, subject, description, due_date, max_score, allow_late) VALUES (?, ?, ?, ?, ?, ?)',
-    ['โปรเจกต์กลุ่ม: ระบบ Web Application เบื้องต้น', 'Web Development', 'ส่งเอกสารข้อเสนอโครงการ (Proposal) พร้อมลิงก์ GitHub Repository และสไลด์นำเสนอ', next_week, 50.0, 1]
-  )
-  puts "Seeded initial sample assignments."
+  default_due = '2026-10-31T23:59'
+  real_assignments = [
+    ['Mindmapping ปฐมภูมิ', 'วิทยาการคำนวณ', 'ระดับชั้นมัธยมศึกษาปีที่ 5 (ม.5/1 - ม.5/8)', default_due, 10.0, 1],
+    ['Mindmapping การเตรียมข้อมูล', 'วิทยาการคำนวณ', 'ระดับชั้นมัธยมศึกษาปีที่ 5 (ม.5/1 - ม.5/8)', default_due, 10.0, 1],
+    ['ใบงานกระบวนวิทยาการข้อมูล', 'วิทยาการคำนวณ', 'ระดับชั้นมัธยมศึกษาปีที่ 5 (ม.5/1 - ม.5/8)', default_due, 10.0, 1],
+    ['ใบงานปฐมภูมิ', 'วิทยาการคำนวณ', 'ระดับชั้นมัธยมศึกษาปีที่ 5 (ม.5/1 - ม.5/8)', default_due, 10.0, 1],
+    ['ใบข้อมูลดิบ', 'วิทยาการคำนวณ', 'ระดับชั้นมัธยมศึกษาปีที่ 5 (ม.5/1 - ม.5/8)', default_due, 10.0, 1]
+  ]
+
+  real_assignments.each do |asg|
+    db.execute(
+      'INSERT INTO assignments (title, subject, description, due_date, max_score, allow_late) VALUES (?, ?, ?, ?, ?, ?)',
+      asg
+    )
+  end
+  puts "Seeded 5 actual teacher assignments."
 end
 
 # Helper to send JSON responses
