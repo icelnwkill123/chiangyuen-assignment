@@ -1429,6 +1429,7 @@ server.mount_proc '/api' do |req, res|
           [score, feedback, id]
         )
         updated = db.get_first_row('SELECT * FROM submissions WHERE id = ?', [id])
+        sync_db_to_github
         send_json(res, { success: true, message: 'บันทึกคะแนนและคำติชมสำเร็จ', submission: updated })
       end
 
