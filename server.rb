@@ -456,10 +456,15 @@ end
 
 # Teacher Authentication Validation
 def check_teacher_auth(req)
-  token = req['X-Teacher-Token'] || req['Authorization'] || req['X-Teacher-Password']
+  # 1. Direct password check in header (highest priority & immune to restart)
+  pwd = req['X-Teacher-Password'].to_s.strip
+  return true if pwd == TEACHER_PASSWORD
+
+  # 2. Token or Authorization header check
+  token = req['X-Teacher-Token'] || req['Authorization']
   token = token.to_s.sub(/\ABearer\s+/i, '').strip
   
-  # Allow direct master password in header for convenience
+  # Allow direct master password in token header
   return true if token == TEACHER_PASSWORD
   return false if token.empty?
   
@@ -500,6 +505,7 @@ module WEBrick
 
   module HTTPServlet
     class ProcHandler < AbstractServlet
+      alias do_PUT    do_GET
       alias do_DELETE  do_GET
       alias do_OPTIONS do_GET
       alias do_PATCH   do_GET
@@ -764,13 +770,14 @@ server.mount_proc '/api' do |req, res|
         body = parse_json_body(req)
         title = body['title'].to_s.strip
         subject = body['subject'].to_s.strip
+        subject = 'วิทยาการคำนวณ' if subject.empty?
         desc = body['description'].to_s.strip
         due_date = body['due_date'].to_s.strip
         max_score = (body['max_score'] || 100).to_f
         allow_late = body['allow_late'] ? 1 : 0
 
-        if title.empty? || subject.empty? || due_date.empty?
-          send_error(res, 'กรุณากรอกชื่อวิชา ชื่องาน และกำหนดวันส่งให้ครบถ้วน')
+        if title.empty? || due_date.empty?
+          send_error(res, 'กรุณากรอกชื่องานและกำหนดวันส่งให้ครบถ้วน')
           next
         end
 
@@ -1072,7 +1079,7 @@ server.mount_proc '/api' do |req, res|
         else
           send_error(res, 'ไม่พบงานที่ค้นหา', 404)
         end
-      elsif method == 'PUT'
+      elsif method == 'PUT' || (method == 'POST' && req.path !~ /delete/)
         unless check_teacher_auth(req)
           send_error(res, 'กรุณาเข้าสู่ระบบด้วยรหัสผ่านอาจารย์ก่อนแก้ไขงาน', 401)
           next
@@ -1081,10 +1088,16 @@ server.mount_proc '/api' do |req, res|
         body = parse_json_body(req)
         title = body['title'].to_s.strip
         subject = body['subject'].to_s.strip
+        subject = 'วิทยาการคำนวณ' if subject.empty?
         desc = body['description'].to_s.strip
         due_date = body['due_date'].to_s.strip
         max_score = (body['max_score'] || 100).to_f
         allow_late = body['allow_late'] ? 1 : 0
+
+        if title.empty? || due_date.empty?
+          send_error(res, 'กรุณากรอกชื่องานและกำหนดวันส่งให้ครบถ้วน')
+          next
+        end
 
         db.execute(
           'UPDATE assignments SET title = ?, subject = ?, description = ?, due_date = ?, max_score = ?, allow_late = ? WHERE id = ?',
@@ -1104,6 +1117,34 @@ server.mount_proc '/api' do |req, res|
         sync_db_to_github
         send_json(res, { success: true, message: 'ลบงานเรียบร้อยแล้ว' })
       end
+
+    when %r{\A/api/assignments/(\d+)/(update|edit)\z}
+      unless check_teacher_auth(req)
+        send_error(res, 'กรุณาเข้าสู่ระบบด้วยรหัสผ่านอาจารย์ก่อนแก้ไขงาน', 401)
+        next
+      end
+      id = Regexp.last_match(1).to_i
+      body = parse_json_body(req)
+      title = body['title'].to_s.strip
+      subject = body['subject'].to_s.strip
+      subject = 'วิทยาการคำนวณ' if subject.empty?
+      desc = body['description'].to_s.strip
+      due_date = body['due_date'].to_s.strip
+      max_score = (body['max_score'] || 100).to_f
+      allow_late = body['allow_late'] ? 1 : 0
+
+      if title.empty? || due_date.empty?
+        send_error(res, 'กรุณากรอกชื่องานและกำหนดวันส่งให้ครบถ้วน')
+        next
+      end
+
+      db.execute(
+        'UPDATE assignments SET title = ?, subject = ?, description = ?, due_date = ?, max_score = ?, allow_late = ? WHERE id = ?',
+        [title, subject, desc, due_date, max_score, allow_late, id]
+      )
+      updated = db.get_first_row('SELECT * FROM assignments WHERE id = ?', [id])
+      sync_db_to_github
+      send_json(res, updated)
 
     when %r{\A/api/assignments/(\d+)/delete\z}
       unless check_teacher_auth(req)
