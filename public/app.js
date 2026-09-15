@@ -2,7 +2,9 @@
 // GLOBAL APPLICATION STATE
 // ==============================================
 let currentRole = 'student';
-let teacherToken = sessionStorage.getItem('teacher_token') || null;
+let teacherToken = localStorage.getItem('teacher_token') || sessionStorage.getItem('teacher_token') || null;
+let teacherPass = localStorage.getItem('teacher_pass') || sessionStorage.getItem('teacher_pass') || null;
+let pendingTeacherAction = null;
 let currentTeacherTab = 'checklist';
 
 let allAssignments = [];
@@ -30,7 +32,7 @@ function initAuthUI() {
   const teacherBadge = document.getElementById('teacherAuthBadge');
   const sessionControls = document.getElementById('teacherSessionControls');
   
-  if (teacherToken) {
+  if (teacherToken || teacherPass) {
     if (teacherBadge) teacherBadge.style.display = 'inline-block';
     if (sessionControls) sessionControls.style.display = 'flex';
   } else {
@@ -49,7 +51,7 @@ async function loadInitialData() {
 // ==============================================
 function switchRole(role) {
   if (role === 'teacher') {
-    if (!teacherToken) {
+    if (!teacherToken && !teacherPass) {
       openTeacherLoginModal();
       return;
     }
@@ -127,12 +129,25 @@ async function handleTeacherLogin(e) {
 
     if (res.ok && data.success) {
       teacherToken = data.token;
+      teacherPass = password;
+      localStorage.setItem('teacher_token', teacherToken);
       sessionStorage.setItem('teacher_token', teacherToken);
+      localStorage.setItem('teacher_pass', teacherPass);
+      sessionStorage.setItem('teacher_pass', teacherPass);
       
       initAuthUI();
       closeTeacherLoginModal();
       setRoleActive('teacher');
       showToast('เข้าสู่ระบบสำหรับอาจารย์สำเร็จ 🎉', 'success');
+
+      if (typeof pendingTeacherAction === 'function') {
+        const act = pendingTeacherAction;
+        pendingTeacherAction = null;
+        act();
+      } else if (pendingTeacherAction === 'createAssignment') {
+        pendingTeacherAction = null;
+        openCreateAssignmentModal();
+      }
     } else {
       errorMsg.textContent = data.error || 'รหัสผ่านไม่ถูกต้อง กรุณาลองใหม่อีกครั้ง';
       errorMsg.style.display = 'block';
@@ -154,7 +169,11 @@ async function handleTeacherLogin(e) {
 
 function logoutTeacher() {
   teacherToken = null;
+  teacherPass = null;
+  localStorage.removeItem('teacher_token');
   sessionStorage.removeItem('teacher_token');
+  localStorage.removeItem('teacher_pass');
+  sessionStorage.removeItem('teacher_pass');
   initAuthUI();
   setRoleActive('student');
   showToast('ออกจากระบบอาจารย์เรียบร้อยแล้ว', 'info');
@@ -175,9 +194,14 @@ function togglePasswordVisibility(inputId, btn) {
 // Helper to get authenticated headers
 function getAuthHeaders() {
   const headers = { 'Content-Type': 'application/json' };
-  if (teacherToken) {
-    headers['Authorization'] = `Bearer ${teacherToken}`;
-    headers['X-Teacher-Token'] = teacherToken;
+  const token = teacherToken || localStorage.getItem('teacher_token') || sessionStorage.getItem('teacher_token');
+  const pass = teacherPass || localStorage.getItem('teacher_pass') || sessionStorage.getItem('teacher_pass');
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+    headers['X-Teacher-Token'] = token;
+  }
+  if (pass) {
+    headers['X-Teacher-Password'] = pass;
   }
   return headers;
 }
@@ -865,14 +889,22 @@ function openChecklistForAssignment(id) {
   switchTeacherTab('checklist');
 }
 
+function formatLocalDateTimeForInput(d) {
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 function openCreateAssignmentModal() {
-  if (!teacherToken) {
+  if (!teacherToken && !teacherPass) {
+    pendingTeacherAction = 'createAssignment';
     openTeacherLoginModal();
     return;
   }
+  pendingTeacherAction = null;
+
   document.getElementById('assignmentModalTitle').textContent = 'สร้างหัวข้องานใหม่';
   document.getElementById('editAssignmentId').value = '';
-  document.getElementById('assignSubject').value = '';
+  document.getElementById('assignSubject').value = 'วิทยาการคำนวณ';
   document.getElementById('assignTitle').value = '';
   document.getElementById('assignDesc').value = '';
   document.getElementById('assignMaxScore').value = '100';
@@ -881,26 +913,29 @@ function openCreateAssignmentModal() {
   const now = new Date();
   now.setDate(now.getDate() + 7);
   now.setHours(23, 59, 0, 0);
-  document.getElementById('assignDueDate').value = now.toISOString().slice(0, 16);
+  document.getElementById('assignDueDate').value = formatLocalDateTimeForInput(now);
 
   openModal('assignmentFormModal');
 }
 
 function openEditAssignmentModal(id) {
-  if (!teacherToken) {
+  if (!teacherToken && !teacherPass) {
+    pendingTeacherAction = () => openEditAssignmentModal(id);
     openTeacherLoginModal();
     return;
   }
+  pendingTeacherAction = null;
+
   const assign = allAssignments.find(a => a.id === id);
   if (!assign) return;
 
   document.getElementById('assignmentModalTitle').textContent = 'แก้ไขหัวข้องาน';
   document.getElementById('editAssignmentId').value = assign.id;
-  document.getElementById('assignSubject').value = assign.subject;
-  document.getElementById('assignTitle').value = assign.title;
+  document.getElementById('assignSubject').value = assign.subject || 'วิทยาการคำนวณ';
+  document.getElementById('assignTitle').value = assign.title || '';
   document.getElementById('assignDesc').value = assign.description || '';
-  document.getElementById('assignMaxScore').value = assign.max_score;
-  document.getElementById('assignDueDate').value = assign.due_date;
+  document.getElementById('assignMaxScore').value = assign.max_score || 100;
+  document.getElementById('assignDueDate').value = assign.due_date || '';
   document.getElementById('assignAllowLate').checked = assign.allow_late === 1;
 
   openModal('assignmentFormModal');
@@ -910,36 +945,96 @@ async function handleSaveAssignment(e) {
   e.preventDefault();
   const id = document.getElementById('editAssignmentId').value;
   const payload = {
-    subject: document.getElementById('assignSubject').value.trim(),
+    subject: document.getElementById('assignSubject').value.trim() || 'วิทยาการคำนวณ',
     title: document.getElementById('assignTitle').value.trim(),
     description: document.getElementById('assignDesc').value.trim(),
     due_date: document.getElementById('assignDueDate').value,
-    max_score: parseFloat(document.getElementById('assignMaxScore').value),
+    max_score: parseFloat(document.getElementById('assignMaxScore').value) || 100,
     allow_late: document.getElementById('assignAllowLate').checked
   };
+
+  if (!payload.title) {
+    showToast('กรุณากรอกหัวข้องาน / ชื่องาน', 'warning');
+    return;
+  }
+  if (!payload.due_date) {
+    showToast('กรุณากำหนดวันและเวลาส่งงาน', 'warning');
+    return;
+  }
+
+  const btn = document.getElementById('btnSaveAssignment');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'กำลังบันทึกข้อมูล...';
+  }
 
   try {
     const url = id ? `/api/assignments/${id}` : '/api/assignments';
     const method = id ? 'PUT' : 'POST';
 
-    const res = await fetch(url, {
+    let res = await fetch(url, {
       method: method,
       headers: getAuthHeaders(),
       body: JSON.stringify(payload)
     });
 
-    const data = await res.json();
+    // Fallback if PUT was rejected by proxy
+    if (!res.ok && id && res.status !== 401) {
+      res = await fetch(`/api/assignments/${id}/update`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(payload)
+      });
+    }
+
+    if (res.status === 401) {
+      showToast('กรุณาเข้าสู่ระบบด้วยรหัสผ่านอาจารย์ก่อนบันทึกงาน', 'warning');
+      pendingTeacherAction = () => {
+        handleSaveAssignment(e);
+      };
+      openTeacherLoginModal();
+      return;
+    }
+
+    const data = await res.json().catch(() => ({}));
     if (res.ok) {
-      showToast(id ? 'แก้ไขหัวข้องานสำเร็จ' : 'สร้างหัวข้องานใหม่เรียบร้อย 🎉', 'success');
+      showToast(id ? 'แก้ไขหัวข้องานสำเร็จ ✨' : 'สร้างหัวข้องานใหม่เรียบร้อย 🎉', 'success');
       closeModal('assignmentFormModal');
+
+      // 1. Refresh global assignments list
       await fetchAssignments();
-      if (!id) currentChecklistAssignmentId = data.id;
+
+      // 2. Select the new or edited assignment
+      const targetId = id ? parseInt(id, 10) : (data.id ? parseInt(data.id, 10) : (allAssignments[allAssignments.length - 1]?.id || null));
+      if (targetId) {
+        currentChecklistAssignmentId = targetId;
+      }
+
+      // 3. Immediately refresh checklist assignment dropdown
+      populateChecklistAssignmentDropdown();
+      const select = document.getElementById('checklistAssignmentSelect');
+      if (select && currentChecklistAssignmentId) {
+        select.value = currentChecklistAssignmentId;
+      }
+
+      // 4. Update checklist table data
+      if (currentChecklistAssignmentId) {
+        await fetchChecklistData(currentChecklistAssignmentId, currentClassFilter);
+      }
+
+      // 5. Update stats count
+      await fetchStats();
     } else {
       showToast(data.error || 'เกิดข้อผิดพลาดในการบันทึกงาน', 'error');
     }
   } catch (err) {
     console.error(err);
-    showToast('เกิดข้อผิดพลาดในการเชื่อมต่อ', 'error');
+    showToast('เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์', 'error');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'บันทึกข้อมูล';
+    }
   }
 }
 
@@ -966,12 +1061,20 @@ async function handleDeleteAssignment(id) {
 
     const data = await res.json().catch(() => ({}));
     if (res.ok && (data.success !== false)) {
-      showToast('ลบงานเรียบร้อยแล้ว', 'success');
+      showToast('ลบหัวข้องานเรียบร้อยแล้ว 🗑️', 'success');
       await fetchAssignments();
       if (currentChecklistAssignmentId === id) {
         currentChecklistAssignmentId = allAssignments[0]?.id || null;
       }
-      loadChecklistTab();
+      populateChecklistAssignmentDropdown();
+      const select = document.getElementById('checklistAssignmentSelect');
+      if (select && currentChecklistAssignmentId) {
+        select.value = currentChecklistAssignmentId;
+      }
+      if (currentChecklistAssignmentId) {
+        await fetchChecklistData(currentChecklistAssignmentId, currentClassFilter);
+      }
+      await fetchStats();
     } else {
       if (res.status === 401) {
         showToast('เซสชันอาจารย์หมดอายุ กรุณาเข้าสู่ระบบใหม่อีกครั้ง', 'warning');
@@ -1813,6 +1916,13 @@ function closeModal(id) {
   const m = document.getElementById(id);
   if (m) m.classList.remove('active');
 }
+
+// Close modal on clicking backdrop outside dialog
+document.addEventListener('click', (e) => {
+  if (e.target && e.target.classList && e.target.classList.contains('modal-overlay')) {
+    closeModal(e.target.id);
+  }
+});
 
 function showToast(message, type = 'info') {
   const container = document.getElementById('toastContainer');
