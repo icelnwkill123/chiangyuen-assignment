@@ -302,6 +302,10 @@ async function loadChecklistTab() {
     await fetchAssignments();
   }
   populateChecklistAssignmentDropdown();
+  const classSelect = document.getElementById('filterClassroom');
+  if (classSelect && classSelect.value) {
+    currentClassFilter = classSelect.value;
+  }
   if (currentChecklistAssignmentId) {
     await fetchChecklistData(currentChecklistAssignmentId, currentClassFilter);
   }
@@ -417,10 +421,22 @@ function populateClassroomFilter(classrooms) {
   const select = document.getElementById('filterClassroom');
   if (!select || !classrooms) return;
 
-  const currentVal = select.value;
+  const selectedClass = (currentClassFilter !== undefined && currentClassFilter !== null) ? currentClassFilter : (select.value || '');
   select.innerHTML = '<option value="">ทั้งหมดทุกห้อง</option>' + classrooms.map(c => `
-    <option value="${escapeHtml(c)}" ${c === currentVal ? 'selected' : ''}>${escapeHtml(c)}</option>
+    <option value="${escapeHtml(c)}" ${c === selectedClass ? 'selected' : ''}>${escapeHtml(c)}</option>
   `).join('');
+  select.value = selectedClass;
+}
+
+async function handleChecklistClassroomChange() {
+  const select = document.getElementById('filterClassroom');
+  currentClassFilter = select ? select.value : '';
+
+  updateExportCsvLink(currentChecklistAssignmentId, currentClassFilter);
+
+  if (currentChecklistAssignmentId) {
+    await fetchChecklistData(currentChecklistAssignmentId, currentClassFilter);
+  }
 }
 
 function updateExportCsvLink(assignmentId, classroom) {
@@ -476,16 +492,25 @@ function setChecklistStatusFilter(status) {
 
 function filterChecklistTable() {
   const select = document.getElementById('filterClassroom');
-  currentClassFilter = select ? select.value : '';
-  
+  const selectedClass = select ? select.value : '';
+
   const searchInput = document.getElementById('checklistSearchInput');
   currentSearchQuery = searchInput ? searchInput.value.trim().toLowerCase() : '';
 
-  // If classroom filter changed, reload API data
+  // If classroom filter changed, reload API data from server
+  if (selectedClass !== currentClassFilter) {
+    currentClassFilter = selectedClass;
+    if (currentChecklistAssignmentId) {
+      updateExportCsvLink(currentChecklistAssignmentId, currentClassFilter);
+      fetchChecklistData(currentChecklistAssignmentId, currentClassFilter);
+      return;
+    }
+  }
+
   if (currentChecklistData && select && select.value !== undefined) {
     updateExportCsvLink(currentChecklistAssignmentId, currentClassFilter);
   }
-  
+
   renderChecklistTable();
 }
 
@@ -497,7 +522,7 @@ function renderChecklistTable() {
 
   // Filter Classroom
   if (currentClassFilter) {
-    list = list.filter(s => s.classroom === currentClassFilter);
+    list = list.filter(s => (s.classroom || '').trim() === currentClassFilter.trim());
   }
 
   // Filter Status
