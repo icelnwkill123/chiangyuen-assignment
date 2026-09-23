@@ -522,9 +522,29 @@ server = WEBrick::HTTPServer.new(
   AccessLog: []
 )
 
-# Trap shutdown signals
-trap('INT') { server.shutdown }
-trap('TERM') { server.shutdown }
+# Periodic background sync every 15 minutes to guarantee zero data loss
+Thread.new do
+  loop do
+    sleep 900 # 15 minutes
+    begin
+      sync_db_to_github_now
+    rescue => e
+      puts "[Periodic DB Sync Error] #{e.message}"
+    end
+  end
+end
+
+# Trap shutdown signals to save database before process exits
+trap('INT') do
+  puts 'Shutting down... Syncing database to GitHub...'
+  sync_db_to_github_now rescue nil
+  server.shutdown
+end
+trap('TERM') do
+  puts 'Shutting down... Syncing database to GitHub...'
+  sync_db_to_github_now rescue nil
+  server.shutdown
+end
 
 # Static files serve handler (Reads into memory buffer without sendfile)
 server.mount_proc '/' do |req, res|
