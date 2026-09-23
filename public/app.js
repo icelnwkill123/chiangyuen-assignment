@@ -482,6 +482,27 @@ async function syncDatabaseToGithub() {
   }
 }
 
+function resetChecklistFilters() {
+  currentClassFilter = '';
+  currentStatusFilter = 'all';
+  currentSearchQuery = '';
+
+  const roomSelect = document.getElementById('filterClassroom');
+  if (roomSelect) roomSelect.value = '';
+
+  const searchInput = document.getElementById('checklistSearchInput');
+  if (searchInput) searchInput.value = '';
+
+  document.querySelectorAll('.status-pill-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.status === 'all');
+  });
+
+  if (currentChecklistAssignmentId) {
+    updateExportCsvLink(currentChecklistAssignmentId, '');
+    fetchChecklistData(currentChecklistAssignmentId, '');
+  }
+}
+
 function setChecklistStatusFilter(status) {
   currentStatusFilter = status;
   document.querySelectorAll('.status-pill-btn').forEach(btn => {
@@ -544,11 +565,30 @@ function renderChecklistTable() {
   }
 
   if (list.length === 0) {
+    let emptyMsg = 'ไม่พบรายชื่อนักเรียนตามเงื่อนไขที่เลือก';
+    let emptySubMsg = '';
+
+    if (currentClassFilter && currentStatusFilter === 'submitted') {
+      emptyMsg = `ห้อง ${escapeHtml(currentClassFilter)} ยังไม่มีนักเรียนส่งงานในหัวข้อนี้`;
+      emptySubMsg = 'คุณครูสามารถกดเลือก "ทั้งหมดทุกห้อง" เพื่อดูนักเรียนที่ส่งงานทั้งหมดได้ครับ';
+    } else if (currentClassFilter) {
+      emptyMsg = `ไม่พบข้อมูลนักเรียนห้อง ${escapeHtml(currentClassFilter)}`;
+      emptySubMsg = 'คุณครูสามารถกดดู "ทั้งหมดทุกห้อง" หรือรีเซ็ตตัวกรองได้ครับ';
+    } else if (currentSearchQuery) {
+      emptyMsg = `ไม่พบนักเรียนที่ค้นหาด้วย "${escapeHtml(currentSearchQuery)}"`;
+      emptySubMsg = 'กรุณาตรวจสอบชื่อหรือรหัสนักเรียนอีกครั้ง';
+    }
+
     tableBody.innerHTML = `
       <tr>
         <td colspan="9" class="text-center py-5">
-          <div class="empty-state">
-            <p>ไม่พบรายชื่อนักเรียนตามเงื่อนไขที่เลือก</p>
+          <div class="empty-state" style="padding: 24px 16px;">
+            <div style="font-size: 2.2rem; margin-bottom: 8px;">📋</div>
+            <p style="font-weight: 600; font-size: 1rem; color: var(--text-dark, #334155); margin-bottom: 6px;">${emptyMsg}</p>
+            ${emptySubMsg ? `<p style="font-size: 0.85rem; color: #64748b; margin-bottom: 14px;">${emptySubMsg}</p>` : ''}
+            <button type="button" class="btn btn-sm btn-outline-success" onclick="resetChecklistFilters()" style="margin-top: 4px;">
+              🔄 รีเซ็ตเป็น "ทั้งหมดทุกห้อง"
+            </button>
           </div>
         </td>
       </tr>
