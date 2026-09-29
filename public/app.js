@@ -741,12 +741,31 @@ function openGradeModalForStudent(studentId) {
   if (student.submission_id) {
     let filesHtml = '';
     if (student.file_name) {
+      const isImg = /\.(png|jpe?g|gif|webp)$/i.test(student.file_name);
       filesHtml += `
-        <div style="margin-bottom: 0.5rem;">
-          <strong>📁 ไฟล์ที่แนบ:</strong> 
-          <a href="${student.file_path}" target="_blank" class="text-primary" download>
-            ${escapeHtml(student.file_name)}
-          </a> (${formatBytes(student.file_size || 0)})
+        <div style="margin-bottom: 0.8rem; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 0.75rem;">
+          <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem; margin-bottom: ${isImg ? '0.5rem' : '0'};">
+            <div>
+              <strong>📁 ไฟล์ที่แนบ:</strong> 
+              <span class="font-medium">${escapeHtml(student.file_name)}</span>
+              <span class="text-xs text-muted">(${formatBytes(student.file_size || 0)})</span>
+            </div>
+            <div style="display: flex; gap: 0.5rem;">
+              <a href="${student.file_path}" target="_blank" class="btn btn-sm btn-outline-primary" style="padding: 0.25rem 0.6rem; font-size: 0.8rem; text-decoration: none;">
+                👁️ เปิดดูเต็มจอ
+              </a>
+              <a href="${student.file_path}?download=1" target="_blank" class="btn btn-sm btn-primary" style="padding: 0.25rem 0.6rem; font-size: 0.8rem; text-decoration: none;" download>
+                📥 ดาวน์โหลด
+              </a>
+            </div>
+          </div>
+          ${isImg ? `
+            <div style="margin-top: 0.5rem; text-align: center; background: #ffffff; border: 1px dashed #cbd5e1; border-radius: 6px; padding: 0.5rem;">
+              <a href="${student.file_path}" target="_blank" title="คลิกเพื่อเปิดดูรูปขนาดเต็ม">
+                <img src="${student.file_path}" alt="${escapeHtml(student.file_name)}" style="max-width: 100%; max-height: 280px; object-fit: contain; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);" loading="lazy" onerror="this.parentElement.style.display='none';">
+              </a>
+            </div>
+          ` : ''}
         </div>
       `;
     }
@@ -1760,9 +1779,14 @@ function buildSubmissionsTableHtml(student, items, stats, isInline = false) {
               subInfoHtml += `<div><small style="color: var(--slate-600);">🕒 ${formatThaiDateTime(item.submission.submitted_at)}</small></div>`;
               if (item.submission.file_path) {
                 subInfoHtml += `
-                  <a href="${item.submission.file_path}" target="_blank" class="file-link-badge mt-1" download>
-                    📁 ${escapeHtml(item.submission.file_name || 'ดาวน์โหลดไฟล์')}
-                  </a>
+                  <div style="display: flex; gap: 0.35rem; align-items: center; flex-wrap: wrap;" class="mt-1">
+                    <a href="${item.submission.file_path}" target="_blank" class="file-link-badge" title="คลิกเพื่อเปิดดูไฟล์">
+                      📁 ${escapeHtml(item.submission.file_name || 'เปิดดูไฟล์')}
+                    </a>
+                    <a href="${item.submission.file_path}?download=1" target="_blank" class="file-link-badge" style="background: #e2e8f0; color: #334155;" title="ดาวน์โหลดไฟล์" download>
+                      📥
+                    </a>
+                  </div>
                 `;
               }
               if (item.submission.submission_link) {
