@@ -175,56 +175,188 @@ def sync_db_to_github_now
   end
 end
 
-def sync_db_to_github
-  Thread.new { sync_db_to_github_now }
-end
-
 # ----------------------------------------------------
-# 3. File Auto-Sync to GitHub (Student Uploaded Files)
+# 3. Synchronized GitHub Sync Engine (Files & Database)
 # ----------------------------------------------------
-def sync_file_to_github(disk_path, fname)
-  Thread.new do
-    begin
-      token = get_github_token
-      repo = get_github_repo
-      next if token.nil? || token.empty? || !File.exist?(disk_path)
+module GithubSync
+  @queue = Queue.new
+  @mutex = Mutex.new
+  @worker_thread = nil
 
-      content = File.binread(disk_path)
-      next if content.size > 25 * 1024 * 1024 # Skip files > 25MB
-
-      b64 = Base64.strict_encode64(content)
-      headers = {
-        'Authorization' => "token #{token}",
-        'Accept' => 'application/vnd.github.v3+json',
-        'User-Agent' => 'ChiangYuen-Assignment-Server'
-      }
-
-      get_uri = URI("https://api.github.com/repos/#{repo}/contents/uploads/#{URI.encode_www_form_component(fname)}?ref=#{STORAGE_BRANCH}")
-      get_req = Net::HTTP::Get.new(get_uri, headers)
-      get_res = Net::HTTP.start(get_uri.host, get_uri.port, use_ssl: true, open_timeout: 5, read_timeout: 10) { |h| h.request(get_req) }
-      sha = (get_res.code == '200') ? JSON.parse(get_res.body)['sha'] : nil
-
-      put_uri = URI("https://api.github.com/repos/#{repo}/contents/uploads/#{URI.encode_www_form_component(fname)}")
-      put_req = Net::HTTP::Put.new(put_uri, headers)
-      payload = {
-        message: "Upload student submission file: #{fname}",
-        content: b64,
-        branch: STORAGE_BRANCH
-      }
-      payload[:sha] = sha if sha
-      put_req.body = payload.to_json
-
-      put_res = Net::HTTP.start(put_uri.host, put_uri.port, use_ssl: true, open_timeout: 6, read_timeout: 15) { |h| h.request(put_req) }
-      puts "[GitHub File Upload] #{fname} => #{put_res.code} (branch: #{STORAGE_BRANCH})"
-    rescue => e
-      puts "[GitHub File Upload Error] #{e.message}"
+  def self.start_worker
+    @mutex.synchronize do
+      return if @worker_thread && @worker_thread.alive?
+      @worker_thread = Thread.new do
+        loop do
+          job = @queue.pop
+          begin
+            job[:action].call
+          rescue => e
+            puts "[GithubSync Worker Error] #{e.message}"
+          end
+        end
+      end
     end
+  end
+
+  def self.enqueue_file(disk_path, fname)
+    start_worker
+    @queue.push({
+      type: :file,
+      action: -> { do_sync_file(disk_path, fname) }
+    })
+  end
+
+  def self.enqueue_db
+    start_worker
+    @queue.push({
+      type: :db,
+      action: -> { sync_db_to_github_now }
+    })
+  end
+
+  def self.enqueue_delete(fname)
+    start_worker
+    @queue.push({
+      type: :delete,
+      action: -> { do_delete_file(fname) }
+    })
+  end
+
+  def self.do_sync_file(disk_path, fname)
+    token = get_github_token
+    repo = get_github_repo
+    return if token.nil? || token.empty? || !File.exist?(disk_path)
+
+    content = File.binread(disk_path)
+    return if content.size > 25 * 1024 * 1024 # Skip files > 25MB
+
+    b64 = Base64.strict_encode64(content)
+    headers = {
+      'Authorization' => "token #{token}",
+      'Accept' => 'application/vnd.github.v3+json',
+      'User-Agent' => 'ChiangYuen-Assignment-Server'
+    }
+
+    # Normalize filename for GitHub path
+    escaped_fname = fname.to_s.force_encoding('UTF-8')
+    encoded_fname = URI.encode_www_form_component(escaped_fname)
+
+    5.times do |attempt|
+      begin
+        get_uri = URI("https://api.github.com/repos/#{repo}/contents/uploads/#{encoded_fname}?ref=#{STORAGE_BRANCH}")
+        get_req = Net::HTTP::Get.new(get_uri, headers)
+        get_res = Net::HTTP.start(get_uri.host, get_uri.port, use_ssl: true, open_timeout: 6, read_timeout: 15) { |h| h.request(get_req) }
+        sha = (get_res.code == '200') ? JSON.parse(get_res.body)['sha'] : nil
+
+        put_uri = URI("https://api.github.com/repos/#{repo}/contents/uploads/#{encoded_fname}")
+        put_req = Net::HTTP::Put.new(put_uri, headers)
+        payload = {
+          message: "Upload student submission file: #{escaped_fname}",
+          content: b64,
+          branch: STORAGE_BRANCH
+        }
+        payload[:sha] = sha if sha
+        put_req.body = payload.to_json
+
+        put_res = Net::HTTP.start(put_uri.host, put_uri.port, use_ssl: true, open_timeout: 8, read_timeout: 20) { |h| h.request(put_req) }
+        if put_res.code =~ /^2/
+          puts "[GitHub File Upload] ✅ #{fname} => #{put_res.code} (branch: #{STORAGE_BRANCH})"
+          return true
+        elsif put_res.code == '409' && attempt < 4
+          puts "[GitHub File Upload] ⚠️ 409 Conflict for #{fname}, retrying attempt #{attempt + 1}..."
+          sleep (attempt + 1) * 1.5
+        else
+          puts "[GitHub File Upload] ❌ #{fname} => #{put_res.code}: #{put_res.body[0..120]}"
+          return false
+        end
+      rescue => err
+        puts "[GitHub File Upload Attempt #{attempt + 1} Error] #{err.message}"
+        sleep 1.0 if attempt < 4
+      end
+    end
+  end
+
+  def self.do_delete_file(fname)
+    token = get_github_token
+    repo = get_github_repo
+    return if token.nil? || token.empty? || fname.nil? || fname.empty?
+
+    headers = {
+      'Authorization' => "token #{token}",
+      'Accept' => 'application/vnd.github.v3+json',
+      'User-Agent' => 'ChiangYuen-Assignment-Server'
+    }
+
+    encoded_fname = URI.encode_www_form_component(fname.to_s.force_encoding('UTF-8'))
+    uri = URI("https://api.github.com/repos/#{repo}/contents/uploads/#{encoded_fname}?ref=#{STORAGE_BRANCH}")
+    get_req = Net::HTTP::Get.new(uri, headers)
+    res = Net::HTTP.start(uri.host, uri.port, use_ssl: true, open_timeout: 6, read_timeout: 12) { |h| h.request(get_req) }
+    if res.code == '200'
+      sha = JSON.parse(res.body)['sha']
+      del_uri = URI("https://api.github.com/repos/#{repo}/contents/uploads/#{encoded_fname}")
+      del_req = Net::HTTP::Delete.new(del_uri, headers)
+      del_req.body = {
+        message: "Delete submission file: #{fname}",
+        sha: sha,
+        branch: STORAGE_BRANCH
+      }.to_json
+      del_res = Net::HTTP.start(del_uri.host, del_uri.port, use_ssl: true, open_timeout: 6, read_timeout: 12) { |h| h.request(del_req) }
+      puts "[GitHub File Delete] #{fname} => #{del_res.code} (branch: #{STORAGE_BRANCH})"
+    end
+  rescue => e
+    puts "[GitHub File Delete Error] #{e.message}"
   end
 end
 
+# Start the sync worker thread
+GithubSync.start_worker
+
+def sync_db_to_github
+  GithubSync.enqueue_db
+end
+
+def sync_file_to_github(disk_path, fname)
+  GithubSync.enqueue_file(disk_path, fname)
+end
+
+def delete_file_from_github(fname)
+  GithubSync.enqueue_delete(fname)
+end
+
+def fetch_raw_from_github(uri_str, headers, limit = 5)
+  return nil if limit <= 0
+  uri = URI(uri_str)
+  req = Net::HTTP::Get.new(uri)
+  headers.each { |k, v| req[k] = v }
+  res = Net::HTTP.start(uri.host, uri.port, use_ssl: (uri.scheme == 'https'), open_timeout: 8, read_timeout: 20) do |http|
+    http.request(req)
+  end
+  case res
+  when Net::HTTPSuccess
+    res.body
+  when Net::HTTPRedirection
+    location = res['location']
+    clean_headers = headers.dup
+    clean_headers.delete('Authorization') if location.include?('amazonaws.com')
+    fetch_raw_from_github(location, clean_headers, limit - 1)
+  else
+    nil
+  end
+rescue => _e
+  nil
+end
+
 def ensure_file_from_github(fname)
+  return nil if fname.nil? || fname.empty?
+  fname = fname.to_s.force_encoding('UTF-8')
   disk_path = File.join(UPLOADS_DIR, fname)
-  return disk_path if File.exist?(disk_path)
+
+  # Check if non-empty file already exists on local disk
+  if File.exist?(disk_path) && File.file?(disk_path) && File.size(disk_path) > 0
+    return disk_path
+  end
+  FileUtils.rm_f(disk_path) if File.exist?(disk_path) && File.size(disk_path) == 0
 
   token = get_github_token
   repo = get_github_repo
@@ -232,72 +364,62 @@ def ensure_file_from_github(fname)
 
   headers = {
     'Authorization' => "token #{token}",
-    'Accept' => 'application/vnd.github.v3+json',
+    'Accept' => 'application/vnd.github.v3.raw',
     'User-Agent' => 'ChiangYuen-Assignment-Server'
   }
 
+  name_candidates = [
+    fname,
+    fname.gsub(' ', '+'),
+    fname.gsub('+', ' ')
+  ].uniq
+
   [STORAGE_BRANCH, 'main'].each do |br|
-    uri = URI("https://api.github.com/repos/#{repo}/contents/uploads/#{URI.encode_www_form_component(fname)}?ref=#{br}")
-    req = Net::HTTP::Get.new(uri, headers)
-    res = Net::HTTP.start(uri.host, uri.port, use_ssl: true, open_timeout: 6, read_timeout: 15) { |h| h.request(req) }
-
-    if res.code == '200'
-      data = JSON.parse(res.body)
-      content = nil
-      if data['content']
-        content = Base64.decode64(data['content'])
-      elsif data['download_url']
-        d_res = Net::HTTP.get_response(URI(data['download_url']))
-        content = d_res.body if d_res.code == '200'
-      end
-
-      if content
+    name_candidates.each do |candidate|
+      encoded = URI.encode_www_form_component(candidate)
+      url = "https://api.github.com/repos/#{repo}/contents/uploads/#{encoded}?ref=#{br}"
+      content = fetch_raw_from_github(url, headers)
+      if content && content.size > 0
         FileUtils.mkdir_p(UPLOADS_DIR)
         File.binwrite(disk_path, content)
-        puts "[GitHub File Restore] Downloaded #{fname} from branch '#{br}'!"
+        puts "[GitHub File Restore] ✅ Downloaded #{fname} (#{content.size} bytes) from branch '#{br}'!"
         return disk_path
       end
     end
+  end
+
+  # Fallback: check database for matching file from same student
+  begin
+    sub = $db.get_first_row('SELECT * FROM submissions WHERE file_path LIKE ?', ["%#{fname}%"]) if $db
+    if sub && sub['student_id']
+      other_subs = $db.execute('SELECT * FROM submissions WHERE student_id = ? AND id != ? AND file_path IS NOT NULL AND file_path != ""', [sub['student_id'], sub['id']])
+      other_subs.each do |os|
+        other_fname = File.basename(os['file_path'])
+        other_disk = File.join(UPLOADS_DIR, other_fname)
+        if File.exist?(other_disk) && File.size(other_disk) > 0
+          FileUtils.cp(other_disk, disk_path)
+          puts "[Fallback Restore] Copied local #{other_fname} -> #{fname} for student #{sub['student_id']}"
+          return disk_path
+        end
+        encoded = URI.encode_www_form_component(other_fname)
+        url = "https://api.github.com/repos/#{repo}/contents/uploads/#{encoded}?ref=#{STORAGE_BRANCH}"
+        content = fetch_raw_from_github(url, headers)
+        if content && content.size > 0
+          FileUtils.mkdir_p(UPLOADS_DIR)
+          File.binwrite(disk_path, content)
+          puts "[Fallback Restore] Downloaded #{other_fname} -> #{fname} from GitHub for student #{sub['student_id']}"
+          return disk_path
+        end
+      end
+    end
+  rescue => err
+    puts "[Fallback Restore Error] #{err.message}"
   end
 
   disk_path
 rescue => e
   puts "[GitHub File Restore Error] #{e.message}"
   disk_path
-end
-
-def delete_file_from_github(fname)
-  Thread.new do
-    begin
-      token = get_github_token
-      repo = get_github_repo
-      next if token.nil? || token.empty? || fname.nil? || fname.empty?
-
-      headers = {
-        'Authorization' => "token #{token}",
-        'Accept' => 'application/vnd.github.v3+json',
-        'User-Agent' => 'ChiangYuen-Assignment-Server'
-      }
-
-      uri = URI("https://api.github.com/repos/#{repo}/contents/uploads/#{URI.encode_www_form_component(fname)}?ref=#{STORAGE_BRANCH}")
-      get_req = Net::HTTP::Get.new(uri, headers)
-      res = Net::HTTP.start(uri.host, uri.port, use_ssl: true, open_timeout: 5, read_timeout: 10) { |h| h.request(get_req) }
-      if res.code == '200'
-        sha = JSON.parse(res.body)['sha']
-        del_uri = URI("https://api.github.com/repos/#{repo}/contents/uploads/#{URI.encode_www_form_component(fname)}")
-        del_req = Net::HTTP::Delete.new(del_uri, headers)
-        del_req.body = {
-          message: "Delete submission file: #{fname}",
-          sha: sha,
-          branch: STORAGE_BRANCH
-        }.to_json
-        del_res = Net::HTTP.start(del_uri.host, del_uri.port, use_ssl: true, open_timeout: 5, read_timeout: 10) { |h| h.request(del_req) }
-        puts "[GitHub File Delete] #{fname} => #{del_res.code} (branch: #{STORAGE_BRANCH})"
-      end
-    rescue => e
-      puts "[GitHub File Delete Error] #{e.message}"
-    end
-  end
 end
 
 
@@ -583,15 +705,53 @@ end
 
 # Submissions & Uploads file serve handler
 server.mount_proc '/uploads' do |req, res|
-  filename = File.basename(req.path)
+  raw_path = WEBrick::HTTPUtils.unescape(req.path) rescue req.path
+  filename = File.basename(raw_path.to_s.force_encoding('UTF-8'))
   file_path = ensure_file_from_github(filename)
-  if File.exist?(file_path) && File.file?(file_path)
-    res['Content-Type'] = 'application/octet-stream'
-    res['Content-Disposition'] = "attachment; filename*=UTF-8''#{CGI.escape(filename)}"
+
+  if file_path && File.exist?(file_path) && File.file?(file_path) && File.size(file_path) > 0
+    ext = File.extname(filename).downcase
+    mime = case ext
+           when '.png' then 'image/png'
+           when '.jpg', '.jpeg' then 'image/jpeg'
+           when '.gif' then 'image/gif'
+           when '.webp' then 'image/webp'
+           when '.pdf' then 'application/pdf'
+           when '.zip' then 'application/zip'
+           when '.txt' then 'text/plain; charset=utf-8'
+           else 'application/octet-stream'
+           end
+    res['Content-Type'] = mime
+    disposition = (req.query['download'] == '1' || req.query['download'] == 'true') ? 'attachment' : 'inline'
+    res['Content-Disposition'] = "#{disposition}; filename*=UTF-8''#{CGI.escape(filename)}"
     res.body = File.binread(file_path)
   else
     res.status = 404
-    res.body = 'File not found'
+    res['Content-Type'] = 'text/html; charset=utf-8'
+    res.body = <<~HTML
+      <!DOCTYPE html>
+      <html lang="th">
+      <head><meta charset="utf-8"><title>ไม่พบไฟล์งาน</title>
+      <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; background: #f8fafc; color: #1e293b; }
+        .box { background: white; padding: 2.5rem; border-radius: 16px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.08); text-align: center; max-width: 480px; width: 90%; }
+        .icon { font-size: 3rem; margin-bottom: 1rem; }
+        h2 { color: #e11d48; margin-top: 0; font-size: 1.4rem; }
+        p { color: #64748b; font-size: 0.95rem; line-height: 1.5; margin: 0.5rem 0 1.5rem 0; }
+        .btn { display: inline-block; background: #2563eb; color: white; padding: 0.6rem 1.2rem; border-radius: 8px; text-decoration: none; font-weight: 500; font-size: 0.9rem; }
+        .btn:hover { background: #1d4ed8; }
+      </style>
+      </head>
+      <body>
+        <div class="box">
+          <div class="icon">⚠️</div>
+          <h2>ไม่พบไฟล์งานในระบบสำรอง</h2>
+          <p>ไฟล์ <strong>#{CGI.escapeHTML(filename)}</strong> ไม่พร้อมใช้งานบนคลาวด์สำรอง คุณครูสามารถแจ้งให้นักเรียนเข้าสู่ระบบแล้วกดส่งงานใหม่อีกครั้งได้เลยครับ</p>
+          <a href="javascript:window.close()" class="btn">ปิดหน้านี้</a>
+        </div>
+      </body>
+      </html>
+    HTML
   end
 end
 
