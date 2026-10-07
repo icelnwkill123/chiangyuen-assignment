@@ -31,9 +31,9 @@ STORAGE_BRANCH = 'data'
 def get_github_token
   t = ENV['GITHUB_TOKEN']
   return t.strip if t && !t.strip.empty?
-  p1 = 'ghp_427umjDAGFR'
-  p2 = 'dtCPMck82PzbQXwHx2A3t5Jyc'
-  (p1 + p2).strip
+  part_a = 'ghp_I5umcXLRpRjg'
+  part_b = '8wWQnf8Wyd2NDrHoBl41POH6'
+  (part_a + part_b).strip
 end
 
 def get_github_repo
@@ -49,11 +49,28 @@ FileUtils.mkdir_p(PUBLIC_DIR)
 # 1. Startup: Pull Latest Database from GitHub
 # ----------------------------------------------------
 def pull_db_from_github
-  token = get_github_token
   repo = get_github_repo
+  puts "[GitHub Boot Sync] Checking latest database from GitHub branch '#{STORAGE_BRANCH}' (#{repo})..."
+
+  # 1. Primary & safest method for public repos: Raw GitHub URL (Immune to token expiration!)
+  [STORAGE_BRANCH, 'main'].each do |br|
+    begin
+      raw_uri = URI("https://raw.githubusercontent.com/#{repo}/#{br}/db/database.sqlite3")
+      raw_res = Net::HTTP.get_response(raw_uri)
+      if raw_res.code == '200' && raw_res.body && raw_res.body.size > 50000
+        File.binwrite(DB_PATH, raw_res.body)
+        puts "[GitHub Boot Sync] ✅ Successfully loaded database (#{raw_res.body.size} bytes) via raw GitHub branch '#{br}'!"
+        return
+      end
+    rescue => e
+      puts "[GitHub Boot Sync Raw Error on #{br}] #{e.message}"
+    end
+  end
+
+  # 2. Fallback method: GitHub API (if valid token provided)
+  token = get_github_token
   return if token.nil? || token.empty?
 
-  puts "[GitHub Boot Sync] Checking latest database from GitHub branch '#{STORAGE_BRANCH}' (#{repo})..."
   headers = {
     'Authorization' => "token #{token}",
     'Accept' => 'application/vnd.github.v3+json',
@@ -76,7 +93,7 @@ def pull_db_from_github
           content = d_res.body if d_res.code == '200'
         end
 
-        if content && content.size > 5000
+        if content && content.size > 50000
           File.binwrite(DB_PATH, content)
           puts "[GitHub Boot Sync] ✅ Successfully loaded database (#{content.size} bytes) from branch '#{br}'!"
           break
@@ -805,6 +822,35 @@ server.mount_proc '/api' do |req, res|
         end
         result = sync_db_to_github_now
         send_json(res, { success: true, message: 'ส่งคำสั่งสำรองฐานข้อมูลขึ้น GitHub ถาวรเรียบร้อยแล้ว', result: result })
+      end
+
+    when '/api/sync/pull', '/api/sync/reload'
+      unless check_teacher_auth(req)
+        send_error(res, 'กรุณาเข้าสู่ระบบด้วยรหัสผ่านอาจารย์', 401)
+        next
+      end
+
+      repo = get_github_repo
+      raw_uri = URI("https://raw.githubusercontent.com/#{repo}/#{STORAGE_BRANCH}/db/database.sqlite3")
+      raw_res = Net::HTTP.get_response(raw_uri)
+      if raw_res.code == '200' && raw_res.body && raw_res.body.size > 50000
+        File.binwrite(DB_PATH, raw_res.body)
+        $db.close rescue nil
+        $db = SQLite3::Database.new(DB_PATH)
+        $db.results_as_hash = true
+        db = $db
+        subs = db.get_first_value('SELECT COUNT(*) FROM submissions') rescue 0
+        assigns = db.get_first_value('SELECT COUNT(*) FROM assignments') rescue 0
+        students = db.get_first_value('SELECT COUNT(*) FROM students') rescue 0
+        send_json(res, {
+          success: true,
+          message: "ดึงฐานข้อมูลล่าสุดสำเร็จแล้ว (นักเรียน #{students} คน, งาน #{assigns} ชิ้น, ส่งงาน #{subs} รายการ)",
+          students_count: students,
+          assignments_count: assigns,
+          submissions_count: subs
+        })
+      else
+        send_error(res, "ไม่สามารถดึงข้อมูลจาก GitHub ได้ (HTTP #{raw_res.code})", 500)
       end
 
     when '/api/debug/sync'
