@@ -2942,6 +2942,151 @@ input:focus, textarea:focus, select:focus {
   to { opacity: 1; transform: translateY(0); }
 }
 
+/* Category Specific Colors for 5 Engineering Branches */
+.cat-mech {
+  background: #eff6ff !important;
+  color: #1d4ed8 !important;
+  border-color: #bfdbfe !important;
+}
+.cat-materials {
+  background: #ecfdf5 !important;
+  color: #047857 !important;
+  border-color: #a7f3d0 !important;
+}
+.cat-energy {
+  background: #f0fdfa !important;
+  color: #0f766e !important;
+  border-color: #99f6e4 !important;
+}
+.cat-ergo {
+  background: #faf5ff !important;
+  color: #7e22ce !important;
+  border-color: #e9d5ff !important;
+}
+.cat-digital {
+  background: #fffbeb !important;
+  color: #b45309 !important;
+  border-color: #fde68a !important;
+}
+
+/* Topic Card Number Badge & Title Row */
+.topic-card-title-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+.topic-num-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  height: 24px;
+  padding: 0 0.4rem;
+  background: var(--slate-100);
+  color: var(--slate-700);
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 800;
+  border: 1px solid var(--slate-200);
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+/* Card States: Taken vs Available */
+.card-is-taken {
+  border-color: #fca5a5 !important;
+  background: #fffafb !important;
+}
+.card-is-taken .topic-card-title {
+  color: #881337 !important;
+}
+
+/* Taken Banner on Card */
+.topic-taken-banner {
+  background: #fff1f2;
+  border: 1.5px solid #fecdd3;
+  border-radius: 10px;
+  padding: 0.75rem 0.9rem;
+  margin-bottom: 1.15rem;
+}
+.taken-room-badge {
+  font-size: 0.88rem;
+  font-weight: 800;
+  color: #9f1239;
+}
+.taken-mem-count {
+  font-size: 0.75rem;
+  font-weight: 700;
+  background: #ffe4e6;
+  color: #be123c;
+  padding: 0.15rem 0.5rem;
+  border-radius: 12px;
+}
+.taken-members-list {
+  font-size: 0.8rem;
+  color: #475569;
+  line-height: 1.4;
+}
+.taken-rule-notice {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #e11d48;
+}
+
+/* Available Banner on Card */
+.topic-available-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: #f0fdf4;
+  border: 1px dashed #86efac;
+  border-radius: 10px;
+  padding: 0.65rem 0.85rem;
+  margin-bottom: 1.15rem;
+  font-size: 0.82rem;
+  color: #166534;
+  font-weight: 600;
+}
+
+/* Disabled Lock Button */
+.btn-taken-disabled {
+  background: #f1f5f9 !important;
+  color: #94a3b8 !important;
+  border: 1px solid #cbd5e1 !important;
+  cursor: not-allowed !important;
+  opacity: 0.85;
+}
+
+/* Matrix Table Enhancements */
+.matrix-row-taken {
+  background: #fff5f5;
+}
+.matrix-row-taken:hover {
+  background: #ffebeb !important;
+}
+.matrix-room-pill {
+  display: inline-block;
+  padding: 0.2rem 0.6rem;
+  background: #fee2e2;
+  color: #991b1b;
+  border-radius: 6px;
+  font-weight: 800;
+  font-size: 0.82rem;
+  border: 1px solid #fca5a5;
+}
+
+/* Topic Select Dropdown in Modal */
+#selProjectTopicId optgroup {
+  font-weight: 800;
+  color: var(--slate-800);
+  background: #f8fafc;
+}
+#selProjectTopicId option {
+  padding: 0.35rem;
+  font-size: 0.9rem;
+}
+
 @media (max-width: 768px) {
   .project-hero-card {
     flex-direction: column;
@@ -2959,4 +3104,5 @@ input:focus, textarea:focus, select:focus {
     max-width: 100%;
   }
 }
+
 
