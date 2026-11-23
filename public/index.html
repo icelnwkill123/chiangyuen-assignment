@@ -90,62 +90,186 @@
       </div>
 
       <!-- ============================================== -->
-      <!-- Prominent Student Self-Check Tracker Section   -->
+      <!-- Student Module Switcher (Assignments vs Projects) -->
       <!-- ============================================== -->
-      <div class="student-tracker-card" id="studentTrackerSection">
-        <div class="tracker-header">
-          <div class="tracker-icon-badge">
-            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"></path><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>
+      <div class="student-module-nav-container">
+        <div class="student-module-nav">
+          <button id="btnStudentTabAssignments" class="student-module-btn active" onclick="switchStudentModule('assignments')">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+            <span>📝 ระบบส่งงานและการบ้าน</span>
+          </button>
+          <button id="btnStudentTabProjects" class="student-module-btn" onclick="switchStudentModule('projects')">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+            <span>💡 เลือกหัวข้อโครงงาน ม.5</span>
+            <span class="badge-module-pill">ห้อง 1 - 8</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- ============================================== -->
+      <!-- MODULE A: ASSIGNMENTS & HOMEWORK SUBMISSION   -->
+      <!-- ============================================== -->
+      <div id="studentModuleAssignments" class="student-module-content active">
+        <!-- Prominent Student Self-Check Tracker Section -->
+        <div class="student-tracker-card" id="studentTrackerSection">
+          <div class="tracker-header">
+            <div class="tracker-icon-badge">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"></path><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>
+            </div>
+            <div class="tracker-text">
+              <h3 class="tracker-title">🔍 ตรวจสอบการส่งงานของนักเรียน (กรอกรหัสนักเรียน)</h3>
+              <p class="tracker-subtitle">นักเรียนสามารถกรอกรหัสประจำตัว 5 หลัก (เช่น <code>23734</code>) หรือพิมพ์ชื่อ-นามสกุล เพื่อดูตารางสรุปสถานะการส่งงานทุกชิ้นได้ทันที</p>
+            </div>
           </div>
-          <div class="tracker-text">
-            <h3 class="tracker-title">🔍 ตรวจสอบการส่งงานของนักเรียน (กรอกรหัสนักเรียน)</h3>
-            <p class="tracker-subtitle">นักเรียนสามารถกรอกรหัสประจำตัว 5 หลัก (เช่น <code>23734</code>) หรือพิมพ์ชื่อ-นามสกุล เพื่อดูตารางสรุปสถานะการส่งงานทุกชิ้นได้ทันที</p>
+
+          <form onsubmit="handleDirectStudentSearch(event)" class="tracker-form">
+            <div class="tracker-input-group">
+              <div class="tracker-input-wrapper">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                <input type="text" id="directStudentSearchInput" placeholder="กรอกรหัสนักเรียน 5 หลัก (เช่น 23734) หรือพิมพ์ชื่อ-นามสกุล..." autocomplete="off" required>
+              </div>
+              <button type="submit" class="btn btn-gold-accent btn-check-student">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"></path><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>
+                <span>ตรวจสอบการส่งงาน</span>
+              </button>
+            </div>
+            <div class="tracker-quick-hints">
+              <span class="hint-label">💡 ตัวอย่างรหัสนักเรียนทดสอบ:</span>
+              <button type="button" class="hint-chip" onclick="quickFillSearch('23734')">23734 (ม.5/1 นายธนโชติ)</button>
+              <button type="button" class="hint-chip" onclick="quickFillSearch('23769')">23769 (ม.5/2)</button>
+              <button type="button" class="hint-chip" onclick="quickFillSearch('23803')">23803 (ม.5/3)</button>
+            </div>
+          </form>
+
+          <!-- Inline Student Checklist Result Area -->
+          <div id="inlineStudentResult" style="display: none;" class="inline-student-result mt-4">
+            <!-- Populated dynamically with detailed Table -->
           </div>
         </div>
 
-        <form onsubmit="handleDirectStudentSearch(event)" class="tracker-form">
-          <div class="tracker-input-group">
-            <div class="tracker-input-wrapper">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-              <input type="text" id="directStudentSearchInput" placeholder="กรอกรหัสนักเรียน 5 หลัก (เช่น 23734) หรือพิมพ์ชื่อ-นามสกุล..." autocomplete="off" required>
+        <!-- Controls & Filter Bar -->
+        <div class="section-header">
+          <div class="section-title">
+            <h3>รายการงานและการบ้านที่เปิดรับ</h3>
+            <span class="badge badge-count" id="studentAssignmentCount">0 งาน</span>
+          </div>
+          <div class="search-filter-box">
+            <div class="search-input-wrapper">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+              <input type="text" id="studentSearchInput" placeholder="ค้นหาชื่องาน หรือชื่อวิชา..." oninput="filterStudentAssignments()">
             </div>
-            <button type="submit" class="btn btn-gold-accent btn-check-student">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"></path><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>
-              <span>ตรวจสอบการส่งงาน</span>
+          </div>
+        </div>
+
+        <!-- Assignments Card Grid -->
+        <div class="assignments-grid" id="studentAssignmentsList">
+          <div class="loading-spinner">กำลังโหลดรายการงาน...</div>
+        </div>
+      </div>
+
+      <!-- ============================================== -->
+      <!-- MODULE B: PROJECT TOPIC SELECTION (ม.5/1 - 8)   -->
+      <!-- ============================================== -->
+      <div id="studentModuleProjects" class="student-module-content" style="display: none;">
+        <!-- Project Hero Card -->
+        <div class="project-hero-card">
+          <div class="project-hero-text">
+            <div class="d-flex align-center gap-2 mb-2 flex-wrap">
+              <span class="badge-tag-project">💡 โครงงานคอมพิวเตอร์และเทคโนโลยี</span>
+              <span class="badge-school-year">ม.5/1 - ม.5/8</span>
+              <span class="badge-rule-pill">1 หัวข้อ เลือกได้ห้องละ 1 กลุ่ม</span>
+            </div>
+            <h2>ระบบเลือกหัวข้อโครงงาน ม.5 โรงเรียนเชียงยืนพิทยาคม</h2>
+            <p>ตรวจสอบสถานะแบบเรียลไทม์ว่า <strong>"หัวข้อนี้ ม.5 ห้องไหนเลือกไปแล้ว"</strong> พร้อมดูรายละเอียดกลุ่ม และลงทะเบียนหัวข้อโครงงานสำหรับกลุ่มของตนเอง</p>
+          </div>
+          <div class="project-hero-actions">
+            <button class="btn btn-outline-light" onclick="toggleMatrixView()">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="3" y1="15" x2="21" y2="15"></line><line x1="9" y1="3" x2="9" y2="21"></line><line x1="15" y1="3" x2="15" y2="21"></line></svg>
+              <span id="btnMatrixToggleText">📊 ดูตารางสรุปภาพรวม Matrix (ห้อง 1 - 8)</span>
+            </button>
+            <button class="btn btn-gold-accent" onclick="openProjectSelectModal()">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>
+              <span>📌 ลงทะเบียนเลือกหัวข้อ</span>
             </button>
           </div>
-          <div class="tracker-quick-hints">
-            <span class="hint-label">💡 ตัวอย่างรหัสนักเรียนทดสอบ:</span>
-            <button type="button" class="hint-chip" onclick="quickFillSearch('23734')">23734 (ม.5/1 นายธนโชติ)</button>
-            <button type="button" class="hint-chip" onclick="quickFillSearch('23769')">23769 (ม.5/2)</button>
-            <button type="button" class="hint-chip" onclick="quickFillSearch('23803')">23803 (ม.5/3)</button>
+        </div>
+
+        <!-- Matrix Overview Section (Collapsible / Toggleable) -->
+        <div id="projectMatrixSection" class="project-matrix-card" style="display: none;">
+          <div class="matrix-card-header">
+            <div class="d-flex align-center gap-2">
+              <div class="matrix-header-icon">📊</div>
+              <div>
+                <h3 class="m-0">ตารางสรุปภาพรวมการเลือกหัวข้อโครงงาน (ม.5/1 - ม.5/8)</h3>
+                <p class="text-muted m-0 text-sm">มองเห็นภาพรวมทันทีว่าแต่ละหัวข้อมีห้องใดเลือกแล้วบ้าง (คลิกที่ปุ่มกลุ่มเพื่อดูรายชื่อสมาชิก)</p>
+              </div>
+            </div>
+            <button class="btn btn-sm btn-outline-secondary" onclick="toggleMatrixView()">✕ ปิดตาราง</button>
           </div>
-        </form>
-
-        <!-- Inline Student Checklist Result Area -->
-        <div id="inlineStudentResult" style="display: none;" class="inline-student-result mt-4">
-          <!-- Populated dynamically with detailed Table -->
-        </div>
-      </div>
-
-
-      <!-- Controls & Filter Bar -->
-      <div class="section-header">
-        <div class="section-title">
-          <h3>รายการงานและการบ้านที่เปิดรับ</h3>
-          <span class="badge badge-count" id="studentAssignmentCount">0 งาน</span>
-        </div>
-        <div class="search-filter-box">
-          <div class="search-input-wrapper">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-            <input type="text" id="studentSearchInput" placeholder="ค้นหาชื่องาน หรือชื่อวิชา..." oninput="filterStudentAssignments()">
+          <div class="table-responsive mt-3">
+            <table class="table matrix-table" id="projectMatrixTable">
+              <!-- Rendered via JS -->
+            </table>
           </div>
         </div>
-      </div>
 
-      <!-- Assignments Card Grid -->
-      <div class="assignments-grid" id="studentAssignmentsList">
-        <div class="loading-spinner">กำลังโหลดรายการงาน...</div>
+        <!-- Filter & Search Toolbar -->
+        <div class="project-toolbar-card">
+          <div class="project-room-filter-row">
+            <span class="filter-label">🏷️ เลือกดูเฉพาะห้อง:</span>
+            <div class="room-filter-chips" id="projectRoomFilterChips">
+              <button class="room-chip active" onclick="setProjectRoomFilter('')">ทั้งหมด (ทุกห้อง)</button>
+              <button class="room-chip" onclick="setProjectRoomFilter('ม.5/1')">ม.5/1</button>
+              <button class="room-chip" onclick="setProjectRoomFilter('ม.5/2')">ม.5/2</button>
+              <button class="room-chip" onclick="setProjectRoomFilter('ม.5/3')">ม.5/3</button>
+              <button class="room-chip" onclick="setProjectRoomFilter('ม.5/4')">ม.5/4</button>
+              <button class="room-chip" onclick="setProjectRoomFilter('ม.5/5')">ม.5/5</button>
+              <button class="room-chip" onclick="setProjectRoomFilter('ม.5/6')">ม.5/6</button>
+              <button class="room-chip" onclick="setProjectRoomFilter('ม.5/7')">ม.5/7</button>
+              <button class="room-chip" onclick="setProjectRoomFilter('ม.5/8')">ม.5/8</button>
+            </div>
+          </div>
+          <div class="project-search-filter-row mt-3">
+            <div class="search-input-wrapper flex-1">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+              <input type="text" id="projectSearchInput" placeholder="ค้นหาชื่อหัวข้อโครงงาน, เทคโนโลยี, คีย์เวิร์ด..." oninput="filterProjectTopics()">
+            </div>
+            <div class="category-select-wrapper">
+              <select id="projectCategoryFilter" onchange="filterProjectTopics()" class="form-select-sm">
+                <option value="">ทุกหมวดหมู่โครงงาน</option>
+                <option value="AI & Machine Learning">AI & Machine Learning</option>
+                <option value="IoT & Smart Agriculture">IoT & Smart Agriculture</option>
+                <option value="Web Application">Web Application</option>
+                <option value="Mobile Application">Mobile Application</option>
+                <option value="Game Development">Game Development</option>
+                <option value="Data Analytics">Data Analytics</option>
+                <option value="IoT & Environment">IoT & Environment</option>
+                <option value="Web & Mobile">Web & Mobile</option>
+                <option value="AI & Natural Language">AI & Natural Language</option>
+              </select>
+            </div>
+            <div class="availability-select-wrapper">
+              <select id="projectAvailabilityFilter" onchange="filterProjectTopics()" class="form-select-sm">
+                <option value="all">ทุกสถานะการเลือก</option>
+                <option value="available">เฉพาะหัวข้อที่ยังว่าง</option>
+                <option value="selected">เฉพาะหัวข้อที่มีผู้เลือกแล้ว</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Topics Summary Stats Bar -->
+        <div class="project-stats-strip">
+          <div class="stat-pill"><span class="stat-num" id="statTotalTopics">0</span> หัวข้อทั้งหมด</div>
+          <div class="stat-pill"><span class="stat-num" id="statSelectedGroups">0</span> กลุ่มที่ลงทะเบียนแล้ว</div>
+          <div class="stat-pill"><span class="stat-num" id="statParticipatingStudents">0</span> คนที่เข้าร่วม</div>
+          <div class="stat-pill-info">💡 สัญลักษณ์สีเขียว 🟢 หมายถึงห้องนั้นได้ลงทะเบียนเลือกหัวข้อนี้ไปแล้ว</div>
+        </div>
+
+        <!-- Topics Grid -->
+        <div class="project-topics-grid" id="projectTopicsGrid">
+          <div class="loading-spinner">กำลังโหลดรายการหัวข้อโครงงาน...</div>
+        </div>
       </div>
     </section>
 
@@ -168,6 +292,10 @@
           <button class="teacher-tab-btn" id="tabBtnStudents" onclick="switchTeacherTab('students')">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
             <span>รายชื่อนักเรียน (<span id="tabCountStudents">0</span>)</span>
+          </button>
+          <button class="teacher-tab-btn" id="tabBtnProjects" onclick="switchTeacherTab('projects')">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+            <span>จัดการโครงงาน (<span id="tabCountProjects">0</span>)</span>
           </button>
         </div>
       </div>
@@ -456,6 +584,122 @@
                 <tr><td colspan="5" class="text-center py-4">กำลังโหลดรายชื่อนักเรียน...</td></tr>
               </tbody>
             </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ------------------------------------------------ -->
+      <!-- TAB 4: จัดการหัวข้อโครงงาน (PROJECT MANAGEMENT) -->
+      <!-- ------------------------------------------------ -->
+      <div id="teacherTabContentProjects" class="tab-content-panel">
+        <div class="table-toolbar">
+          <div class="toolbar-left d-flex gap-2 flex-wrap">
+            <button class="btn btn-primary" onclick="openCreateTopicModal()">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>
+              <span>+ เพิ่มหัวข้อโครงงานใหม่</span>
+            </button>
+            <button class="btn btn-secondary" onclick="exportProjectsCSV()">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+              <span>📥 ดาวน์โหลดรายงานโครงงาน (Excel/CSV)</span>
+            </button>
+          </div>
+          <div class="toolbar-right d-flex gap-2 align-center">
+            <div class="search-input-wrapper small">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+              <input type="text" id="teacherProjectSearchInput" placeholder="ค้นหาโครงงาน / ห้อง / กลุ่ม..." oninput="filterTeacherProjects()">
+            </div>
+            <button class="btn btn-outline-secondary btn-icon" onclick="loadTeacherProjectsTab()" title="รีเฟรชข้อมูล">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"></path><path d="M1 20v-6h6"></path><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Teacher Project Stats Strip -->
+        <div class="stats-overview-grid mt-3 mb-4">
+          <div class="stat-card">
+            <div class="stat-number" id="tStatTopicsCount">0</div>
+            <div class="stat-label">หัวข้อโครงงานทั้งหมด</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-number" id="tStatGroupsCount">0</div>
+            <div class="stat-label">กลุ่มที่ลงทะเบียนแล้ว</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-number" id="tStatStudentsCount">0</div>
+            <div class="stat-label">นักเรียนที่มีกลุ่มแล้ว</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-number" id="tStatActiveRooms">0 / 8</div>
+            <div class="stat-label">ห้องที่มีการลงทะเบียน</div>
+          </div>
+        </div>
+
+        <!-- Teacher Sub-View Toggle -->
+        <div class="d-flex justify-between align-center mb-3 flex-wrap gap-2">
+          <div class="teacher-sub-switch">
+            <button id="btnTeacherSubTopics" class="sub-switch-btn active" onclick="switchTeacherProjectSubTab('topics')">
+              📋 รายการหัวข้อโครงงาน (<span id="tSubTopicsCount">0</span>)
+            </button>
+            <button id="btnTeacherSubSelections" class="sub-switch-btn" onclick="switchTeacherProjectSubTab('selections')">
+              👥 รายการกลุ่มที่ลงทะเบียน (<span id="tSubSelectionsCount">0</span>)
+            </button>
+            <button id="btnTeacherSubMatrix" class="sub-switch-btn" onclick="switchTeacherProjectSubTab('matrix')">
+              📊 ตารางสรุปภาพรวม Matrix
+            </button>
+          </div>
+        </div>
+
+        <!-- Sub-panel 1: Topics Table -->
+        <div id="teacherSubPanelTopics" class="card table-card-modern">
+          <div class="table-responsive">
+            <table class="data-table" id="teacherTopicsTable">
+              <thead>
+                <tr>
+                  <th style="width: 50px;">ID</th>
+                  <th style="width: 140px;">หมวดหมู่</th>
+                  <th>ชื่อหัวข้อโครงงาน</th>
+                  <th>ห้องที่เลือกไปแล้ว</th>
+                  <th style="width: 100px; text-align: center;">สถานะ</th>
+                  <th style="width: 160px; text-align: center;">จัดการ</th>
+                </tr>
+              </thead>
+              <tbody id="teacherTopicsTableBody">
+                <tr><td colspan="6" class="text-center py-4">กำลังโหลดข้อมูลหัวข้อโครงงาน...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Sub-panel 2: Selections Table -->
+        <div id="teacherSubPanelSelections" class="card table-card-modern" style="display: none;">
+          <div class="table-responsive">
+            <table class="data-table" id="teacherSelectionsTable">
+              <thead>
+                <tr>
+                  <th style="width: 80px;">ห้อง</th>
+                  <th style="width: 70px;">กลุ่มที่</th>
+                  <th>ชื่อกลุ่ม / ชื่อโครงงานที่เสนอ</th>
+                  <th>หัวข้อหลัก</th>
+                  <th>สมาชิกในกลุ่ม</th>
+                  <th style="width: 120px;">ที่ปรึกษา</th>
+                  <th style="width: 110px; text-align: center;">จัดการ</th>
+                </tr>
+              </thead>
+              <tbody id="teacherSelectionsTableBody">
+                <tr><td colspan="7" class="text-center py-4">ยังไม่มีกลุ่มใดลงทะเบียน</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Sub-panel 3: Matrix Table -->
+        <div id="teacherSubPanelMatrix" class="card table-card-modern" style="display: none;">
+          <div class="p-3">
+            <div class="table-responsive">
+              <table class="table matrix-table" id="teacherMatrixTable">
+                <!-- Dynamically populated -->
+              </table>
+            </div>
           </div>
         </div>
       </div>
@@ -788,9 +1032,200 @@
     </div>
   </div>
 
+  <!-- ============================================== -->
+  <!-- 7. Student Project Topic Selection Modal       -->
+  <!-- ============================================== -->
+  <div class="modal-overlay" id="modalProjectSelect">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-header school-modal-header">
+        <div class="modal-header-title">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+          <h3>ลงทะเบียนเลือกหัวข้อโครงงาน ม.5</h3>
+        </div>
+        <button class="modal-close text-white" onclick="closeModal('modalProjectSelect')">&times;</button>
+      </div>
+
+      <form id="projectSelectForm" onsubmit="handleProjectSelectionSubmit(event)">
+        <div class="modal-body p-4">
+          <!-- Selected Topic Info Card -->
+          <div class="topic-selection-summary-card mb-4" id="selectModalTopicSummary">
+            <div class="d-flex justify-between align-center mb-1">
+              <span class="badge-tag-project" id="selModalCategory">หมวดหมู่</span>
+              <span class="badge badge-success" id="selModalQuota">โควตา: ห้องละ 1 กลุ่ม</span>
+            </div>
+            <h3 id="selModalTitle" class="m-0 mb-2">ชื่อหัวข้อโครงงาน</h3>
+            <p id="selModalDesc" class="text-muted text-sm m-0">คำอธิบาย</p>
+          </div>
+
+          <!-- Room Selection and Room Status Warning -->
+          <div class="row g-3">
+            <div class="col-md-6 form-group">
+              <label for="selClassroom">ห้องเรียนของกลุ่มท่าน <span class="required">*</span></label>
+              <select id="selClassroom" class="form-select school-select" required onchange="handleProjectRoomSelectChange()">
+                <option value="">-- กรุณาเลือกห้องเรียน --</option>
+                <option value="ม.5/1">ม.5/1</option>
+                <option value="ม.5/2">ม.5/2</option>
+                <option value="ม.5/3">ม.5/3</option>
+                <option value="ม.5/4">ม.5/4</option>
+                <option value="ม.5/5">ม.5/5</option>
+                <option value="ม.5/6">ม.5/6</option>
+                <option value="ม.5/7">ม.5/7</option>
+                <option value="ม.5/8">ม.5/8</option>
+              </select>
+            </div>
+            <div class="col-md-6 form-group">
+              <label for="selGroupNumber">กลุ่มที่ (หมายเลขกลุ่ม) <span class="required">*</span></label>
+              <input type="number" id="selGroupNumber" min="1" max="20" required placeholder="เช่น 1, 2, 3..." class="form-input">
+            </div>
+          </div>
+
+          <!-- Alert if room already selected this topic -->
+          <div id="selRoomStatusAlert" class="alert-box alert-danger mt-2 mb-3" style="display: none;">
+            <!-- Rendered dynamically -->
+          </div>
+
+          <!-- Group Name & Custom Title -->
+          <div class="form-group">
+            <label for="selGroupName">ชื่อกลุ่ม (Group Name) <span class="text-muted text-sm">(ไม่บังคับ)</span></label>
+            <input type="text" id="selGroupName" placeholder="เช่น ทีม AI เชียงยืน, Cyber Squad" class="form-input">
+          </div>
+
+          <div class="form-group">
+            <label for="selCustomTitle">ชื่อโครงงานย่อยที่ต้องการศึกษา / ต่อยอด <span class="text-muted text-sm">(ไม่บังคับ ใช้ชื่อหัวข้อหลักได้)</span></label>
+            <input type="text" id="selCustomTitle" placeholder="ระบุหากต้องการตั้งชื่อโครงงานเฉพาะของกลุ่ม..." class="form-input">
+          </div>
+
+          <!-- Group Members Builder -->
+          <div class="members-builder-box mt-4">
+            <div class="d-flex justify-between align-center mb-2">
+              <label class="section-sub-label m-0">
+                👥 รายชื่อสมาชิกในกลุ่ม (<span id="memberCountBadge">1</span> คน) <span class="required">*</span>
+              </label>
+              <button type="button" class="btn btn-sm btn-outline-success" onclick="addProjectMemberRow()">
+                + เพิ่มสมาชิก
+              </button>
+            </div>
+            <p class="text-muted text-xs mb-3">💡 เลือกห้องเรียนด้านบนก่อน เพื่อให้ระบบดึงรายชื่อเพื่อนร่วมห้องมาให้เลือกอัตโนมัติ</p>
+
+            <div id="projectMembersListContainer" class="members-rows-container">
+              <!-- Dynamically populated member input rows -->
+            </div>
+          </div>
+
+          <!-- Advisor & Note -->
+          <div class="row g-3 mt-3">
+            <div class="col-md-6 form-group">
+              <label for="selAdvisor">ครูที่ปรึกษาโครงงาน</label>
+              <input type="text" id="selAdvisor" placeholder="เช่น ครูอนุชา พันธุกูล" class="form-input">
+            </div>
+            <div class="col-md-6 form-group">
+              <label for="selNote">หมายเหตุเพิ่มเติม</label>
+              <input type="text" id="selNote" placeholder="รายละเอียดอื่นๆ (ถ้ามี)" class="form-input">
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer d-flex justify-between align-center">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('modalProjectSelect')">ยกเลิก</button>
+          <button type="submit" class="btn btn-success" id="btnSubmitProjectSelection">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+            <span>ยืนยันการเลือกหัวข้อโครงงาน</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ============================================== -->
+  <!-- 8. Project Topic Details & Room Selections Modal -->
+  <!-- ============================================== -->
+  <div class="modal-overlay" id="modalProjectDetails">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-header school-modal-header">
+        <div class="modal-header-title">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+          <h3>รายละเอียดหัวข้อและการเลือกของแต่ละห้อง</h3>
+        </div>
+        <button class="modal-close text-white" onclick="closeModal('modalProjectDetails')">&times;</button>
+      </div>
+
+      <div class="modal-body p-4" id="projectDetailsModalBody">
+        <!-- Dynamically populated -->
+      </div>
+
+      <div class="modal-footer d-flex justify-between align-center">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('modalProjectDetails')">ปิดหน้าต่าง</button>
+        <button type="button" class="btn btn-primary" id="btnSelectFromDetailsModal" onclick="handleSelectFromDetailsModal()">
+          📌 เลือกหัวข้อนี้
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================== -->
+  <!-- 9. Teacher Create / Edit Topic Modal           -->
+  <!-- ============================================== -->
+  <div class="modal-overlay" id="modalTeacherTopic">
+    <div class="modal-dialog modal-md">
+      <div class="modal-header">
+        <h3 id="teacherTopicModalTitle">เพิ่มหัวข้อโครงงานใหม่</h3>
+        <button class="modal-close" onclick="closeModal('modalTeacherTopic')">&times;</button>
+      </div>
+
+      <form id="teacherTopicForm" onsubmit="handleSaveTeacherTopic(event)">
+        <input type="hidden" id="topicEditId" value="">
+        <div class="modal-body p-4">
+          <div class="form-group">
+            <label for="topicInputTitle">ชื่อหัวข้อโครงงาน <span class="required">*</span></label>
+            <input type="text" id="topicInputTitle" required placeholder="เช่น ระบบตรวจจับใบหน้าเพื่อเช็คชื่อเข้าเรียน" class="form-input">
+          </div>
+
+          <div class="form-group">
+            <label for="topicInputCategory">หมวดหมู่โครงงาน <span class="required">*</span></label>
+            <input type="text" id="topicInputCategory" required placeholder="เช่น AI & Machine Learning, Web Application, IoT" class="form-input">
+          </div>
+
+          <div class="form-group">
+            <label for="topicInputDesc">คำอธิบายรายละเอียดหัวข้อ</label>
+            <textarea id="topicInputDesc" rows="3" placeholder="อธิบายแนวคิด เป้าหมาย และประโยชน์ของโครงงาน..."></textarea>
+          </div>
+
+          <div class="form-group">
+            <label for="topicInputObjectives">วัตถุประสงค์</label>
+            <textarea id="topicInputObjectives" rows="2" placeholder="1. เพื่อ...\n2. เพื่อ..."></textarea>
+          </div>
+
+          <div class="form-group">
+            <label for="topicInputTech">เทคโนโลยี / เครื่องมือที่แนะนำ</label>
+            <input type="text" id="topicInputTech" placeholder="เช่น Python, OpenCV, HTML5, ESP32" class="form-input">
+          </div>
+
+          <div class="row g-3">
+            <div class="col-md-6 form-group">
+              <label for="topicInputQuotaRoom">จำนวนกลุ่มสูงสุดต่อห้อง</label>
+              <input type="number" id="topicInputQuotaRoom" min="1" max="5" value="1" class="form-input">
+            </div>
+            <div class="col-md-6 form-group">
+              <label for="topicInputStatus">สถานะเปิดรับ</label>
+              <select id="topicInputStatus" class="form-select school-select">
+                <option value="open">เปิดรับการเลือก (Open)</option>
+                <option value="closed">ปิดรับการเลือก (Closed)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer d-flex justify-between align-center">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('modalTeacherTopic')">ยกเลิก</button>
+          <button type="submit" class="btn btn-primary" id="btnSaveTopicSubmit">บันทึกหัวข้อ</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- Toast Container -->
   <div class="toast-container" id="toastContainer"></div>
 
-  <script src="app.js?v=20260923-2"></script>
+  <script src="app.js?v=20260923-3"></script>
 </body>
 </html>
