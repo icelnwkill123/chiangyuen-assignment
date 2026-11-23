@@ -175,21 +175,21 @@
         <div class="project-hero-card">
           <div class="project-hero-text">
             <div class="d-flex align-center gap-2 mb-2 flex-wrap">
-              <span class="badge-tag-project">💡 โครงงานคอมพิวเตอร์และเทคโนโลยี</span>
+              <span class="badge-tag-project">💡 โครงงานคอมพิวเตอร์และสิ่งประดิษฐ์ ม.5</span>
               <span class="badge-school-year">ม.5/1 - ม.5/8</span>
-              <span class="badge-rule-pill">1 หัวข้อ เลือกได้ห้องละ 1 กลุ่ม</span>
+              <span class="badge-rule-pill">🔒 1 หัวข้อต่อ 1 กลุ่มทั่วระดับชั้น (ห้ามซ้ำกัน)</span>
             </div>
-            <h2>ระบบเลือกหัวข้อโครงงาน ม.5 โรงเรียนเชียงยืนพิทยาคม</h2>
-            <p>ตรวจสอบสถานะแบบเรียลไทม์ว่า <strong>"หัวข้อนี้ ม.5 ห้องไหนเลือกไปแล้ว"</strong> พร้อมดูรายละเอียดกลุ่ม และลงทะเบียนหัวข้อโครงงานสำหรับกลุ่มของตนเอง</p>
+            <h2>ระบบเลือกหัวข้อโครงงาน ม.5 โรงเรียนเชียงยืนพิทยาคม (100 หัวข้อ)</h2>
+            <p>ตรวจสอบสถานะแบบเรียลไทม์ว่า <strong>"หัวข้อนี้ ห้องไหนกลุ่มไหนเลือกไปแล้ว"</strong> โดยแต่ละหัวข้อมีได้เพียง 1 กลุ่มเท่านั้น (ไม่สามารถเลือกซ้ำกันได้)</p>
           </div>
           <div class="project-hero-actions">
             <button class="btn btn-outline-light" onclick="toggleMatrixView()">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="3" y1="15" x2="21" y2="15"></line><line x1="9" y1="3" x2="9" y2="21"></line><line x1="15" y1="3" x2="15" y2="21"></line></svg>
-              <span id="btnMatrixToggleText">📊 ดูตารางสรุปภาพรวม Matrix (ห้อง 1 - 8)</span>
+              <span id="btnMatrixToggleText">📊 ตารางสรุปภาพรวม 100 หัวข้อ (ม.5/1 - 8)</span>
             </button>
             <button class="btn btn-gold-accent" onclick="openProjectSelectModal()">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>
-              <span>📌 ลงทะเบียนเลือกหัวข้อ</span>
+              <span>📌 เมนูลงทะเบียนเลือกหัวข้อ</span>
             </button>
           </div>
         </div>
@@ -200,8 +200,8 @@
             <div class="d-flex align-center gap-2">
               <div class="matrix-header-icon">📊</div>
               <div>
-                <h3 class="m-0">ตารางสรุปภาพรวมการเลือกหัวข้อโครงงาน (ม.5/1 - ม.5/8)</h3>
-                <p class="text-muted m-0 text-sm">มองเห็นภาพรวมทันทีว่าแต่ละหัวข้อมีห้องใดเลือกแล้วบ้าง (คลิกที่ปุ่มกลุ่มเพื่อดูรายชื่อสมาชิก)</p>
+                <h3 class="m-0">ตารางสรุปภาพรวมโครงงาน 100 หัวข้อ (ม.5/1 - ม.5/8)</h3>
+                <p class="text-muted m-0 text-sm">มองเห็นภาพรวมทันทีว่าแต่ละหัวข้อมีห้องใดและกลุ่มใดเลือกไปแล้วบ้าง (กติกา: 1 หัวข้อต่อ 1 กลุ่ม ห้ามซ้ำกัน)</p>
               </div>
             </div>
             <button class="btn btn-sm btn-outline-secondary" onclick="toggleMatrixView()">✕ ปิดตาราง</button>
@@ -216,7 +216,7 @@
         <!-- Filter & Search Toolbar -->
         <div class="project-toolbar-card">
           <div class="project-room-filter-row">
-            <span class="filter-label">🏷️ เลือกดูเฉพาะห้อง:</span>
+            <span class="filter-label">🏷️ เมนูเลือกดูตามห้อง:</span>
             <div class="room-filter-chips" id="projectRoomFilterChips">
               <button class="room-chip active" onclick="setProjectRoomFilter('')">ทั้งหมด (ทุกห้อง)</button>
               <button class="room-chip" onclick="setProjectRoomFilter('ม.5/1')">ม.5/1</button>
@@ -232,27 +232,23 @@
           <div class="project-search-filter-row mt-3">
             <div class="search-input-wrapper flex-1">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-              <input type="text" id="projectSearchInput" placeholder="ค้นหาชื่อหัวข้อโครงงาน, เทคโนโลยี, คีย์เวิร์ด..." oninput="filterProjectTopics()">
+              <input type="text" id="projectSearchInput" placeholder="ค้นหาชื่อโครงงาน, รหัส, เทคโนโลยี, คำอธิบาย..." oninput="filterProjectTopics()">
             </div>
             <div class="category-select-wrapper">
               <select id="projectCategoryFilter" onchange="filterProjectTopics()" class="form-select-sm">
-                <option value="">ทุกหมวดหมู่โครงงาน</option>
-                <option value="AI & Machine Learning">AI & Machine Learning</option>
-                <option value="IoT & Smart Agriculture">IoT & Smart Agriculture</option>
-                <option value="Web Application">Web Application</option>
-                <option value="Mobile Application">Mobile Application</option>
-                <option value="Game Development">Game Development</option>
-                <option value="Data Analytics">Data Analytics</option>
-                <option value="IoT & Environment">IoT & Environment</option>
-                <option value="Web & Mobile">Web & Mobile</option>
-                <option value="AI & Natural Language">AI & Natural Language</option>
+                <option value="">ทุกหมวดหมู่วิศวกรรม (ครบ 5 หมวด)</option>
+                <option value="หมวดที่ 1: วิศวกรรมกลไกและสิ่งประดิษฐ์เพื่อการใช้งาน">หมวด 1: วิศวกรรมกลไกและสิ่งประดิษฐ์ (25 เรื่อง)</option>
+                <option value="หมวดที่ 2: วิศวกรรมวัสดุศาสตร์และบรรจุภัณฑ์ยั่งยืน">หมวด 2: วัสดุศาสตร์และบรรจุภัณฑ์ยั่งยืน (20 เรื่อง)</option>
+                <option value="หมวดที่ 3: วิศวกรรมสิ่งแวดล้อม น้ำ และพลังงานสะอาด">หมวด 3: สิ่งแวดล้อม น้ำ และพลังงานสะอาด (20 เรื่อง)</option>
+                <option value="หมวดที่ 4: การยศาสตร์และอุปกรณ์อำนวยความสะดวกในชีวิตประจำวัน">หมวด 4: การยศาสตร์และอุปกรณ์อำนวยความสะดวก (15 เรื่อง)</option>
+                <option value="หมวดที่ 5: การออกแบบระบบดิจิทัล สื่ออินเทอร์แอคทีฟ และพื้นที่พฤติกรรม">หมวด 5: ดิจิทัลและพื้นที่พฤติกรรม (20 เรื่อง)</option>
               </select>
             </div>
             <div class="availability-select-wrapper">
               <select id="projectAvailabilityFilter" onchange="filterProjectTopics()" class="form-select-sm">
-                <option value="all">ทุกสถานะการเลือก</option>
-                <option value="available">เฉพาะหัวข้อที่ยังว่าง</option>
-                <option value="selected">เฉพาะหัวข้อที่มีผู้เลือกแล้ว</option>
+                <option value="all">ทุกสถานะ (100 หัวข้อ)</option>
+                <option value="available">🟢 เฉพาะหัวข้อที่ยังว่าง (ยังไม่มีใครเลือก)</option>
+                <option value="selected">🔴 เฉพาะหัวข้อที่ถูกเลือกแล้ว</option>
               </select>
             </div>
           </div>
@@ -260,10 +256,11 @@
 
         <!-- Topics Summary Stats Bar -->
         <div class="project-stats-strip">
-          <div class="stat-pill"><span class="stat-num" id="statTotalTopics">0</span> หัวข้อทั้งหมด</div>
-          <div class="stat-pill"><span class="stat-num" id="statSelectedGroups">0</span> กลุ่มที่ลงทะเบียนแล้ว</div>
-          <div class="stat-pill"><span class="stat-num" id="statParticipatingStudents">0</span> คนที่เข้าร่วม</div>
-          <div class="stat-pill-info">💡 สัญลักษณ์สีเขียว 🟢 หมายถึงห้องนั้นได้ลงทะเบียนเลือกหัวข้อนี้ไปแล้ว</div>
+          <div class="stat-pill"><span class="stat-num" id="statTotalTopics">100</span> หัวข้อทั้งหมด</div>
+          <div class="stat-pill"><span class="stat-num text-success" id="statAvailableTopics">100</span> หัวข้อที่ยังว่าง</div>
+          <div class="stat-pill"><span class="stat-num text-danger" id="statSelectedGroups">0</span> กลุ่มที่เลือกแล้ว</div>
+          <div class="stat-pill"><span class="stat-num" id="statParticipatingStudents">0</span> นักเรียนที่มีกลุ่มแล้ว</div>
+          <div class="stat-pill-info">🔒 กติกา: 1 หัวข้อต่อ 1 กลุ่มทั่วระดับชั้น ม.5 (ห้องใดเลือกแล้ว ห้องอื่นไม่สามารถเลือกซ้ำได้)</div>
         </div>
 
         <!-- Topics Grid -->
@@ -1047,14 +1044,26 @@
 
       <form id="projectSelectForm" onsubmit="handleProjectSelectionSubmit(event)">
         <div class="modal-body p-4">
+          <!-- Topic Selector Menu (เมนูเลือกหัวข้อโครงงาน) -->
+          <div class="form-group mb-3">
+            <label for="selProjectTopicId" class="d-flex justify-between align-center">
+              <span>💡 เมนูเลือกหัวข้อโครงงาน (100 เรื่อง) <span class="required">*</span></span>
+              <span class="text-xs text-muted" id="selTopicAvailabilityHint">หัวข้อที่เลือกแล้วจะไม่สามารถเลือกซ้ำได้</span>
+            </label>
+            <select id="selProjectTopicId" class="form-select school-select" required onchange="onModalTopicSelectChange()">
+              <option value="">-- กรุณาเลือกหัวข้อโครงงาน --</option>
+            </select>
+          </div>
+
           <!-- Selected Topic Info Card -->
           <div class="topic-selection-summary-card mb-4" id="selectModalTopicSummary">
             <div class="d-flex justify-between align-center mb-1">
               <span class="badge-tag-project" id="selModalCategory">หมวดหมู่</span>
-              <span class="badge badge-success" id="selModalQuota">โควตา: ห้องละ 1 กลุ่ม</span>
+              <span class="badge badge-success" id="selModalQuota">สถานะ: 🟢 ว่าง (พร้อมลงทะเบียน)</span>
             </div>
             <h3 id="selModalTitle" class="m-0 mb-2">ชื่อหัวข้อโครงงาน</h3>
             <p id="selModalDesc" class="text-muted text-sm m-0">คำอธิบาย</p>
+            <div id="selModalTech" class="text-xs text-muted mt-2" style="display: none;"></div>
           </div>
 
           <!-- Room Selection and Room Status Warning -->
