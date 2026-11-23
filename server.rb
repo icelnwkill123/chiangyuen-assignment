@@ -561,13 +561,15 @@ end
 db.execute <<-SQL
   CREATE TABLE IF NOT EXISTS project_topics (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    topic_number INTEGER NOT NULL,
+    code TEXT NOT NULL,
     title TEXT NOT NULL,
     category TEXT NOT NULL,
     description TEXT,
     objectives TEXT,
     technologies TEXT,
     max_groups_per_room INTEGER DEFAULT 1,
-    max_groups_total INTEGER DEFAULT 8,
+    max_groups_total INTEGER DEFAULT 1,
     status TEXT DEFAULT 'open',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
@@ -577,7 +579,7 @@ SQL
 db.execute <<-SQL
   CREATE TABLE IF NOT EXISTS project_selections (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    topic_id INTEGER NOT NULL,
+    topic_id INTEGER NOT NULL UNIQUE,
     classroom TEXT NOT NULL,
     group_number INTEGER NOT NULL,
     group_name TEXT,
@@ -588,120 +590,43 @@ db.execute <<-SQL
     status TEXT DEFAULT 'confirmed',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY(topic_id) REFERENCES project_topics(id) ON DELETE CASCADE,
-    UNIQUE(classroom, topic_id)
+    UNIQUE(classroom, group_number)
   );
 SQL
 db.execute('CREATE INDEX IF NOT EXISTS idx_proj_sel_top ON project_selections(topic_id)')
 db.execute('CREATE INDEX IF NOT EXISTS idx_proj_sel_cls ON project_selections(classroom)')
 
-# Seed 12 project topics if empty
+# Auto-migrate columns and unique indexes for older database schemas
+begin
+  topic_cols = db.execute("PRAGMA table_info(project_topics)").map { |c| c['name'] }
+  db.execute("ALTER TABLE project_topics ADD COLUMN topic_number INTEGER DEFAULT 0") unless topic_cols.include?('topic_number')
+  db.execute("ALTER TABLE project_topics ADD COLUMN code TEXT DEFAULT ''") unless topic_cols.include?('code')
+rescue => e
+  puts "[DB Migration] project_topics columns: #{e.message}"
+end
+
+begin
+  db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_proj_sel_uniq_topic ON project_selections(topic_id)")
+  db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_proj_sel_uniq_grp ON project_selections(classroom, group_number)")
+rescue => e
+  puts "[DB Migration] project_selections indexes: #{e.message}"
+end
+
+# Seed 100 project topics if empty or old seed
 topics_count = db.get_first_value('SELECT COUNT(*) FROM project_topics') rescue 0
-if topics_count == 0
-  seed_topics = [
-    [
-      'ระบบคัดแยกขยะอัจฉริยะด้วย AI และกล้องคอมพิวเตอร์',
-      'AI & Machine Learning',
-      'พัฒนาระบบตรวจจับและจำแนกประเภทขยะ (รีไซเคิล, ทั่วไป, อินทรีย์, อันตราย) ด้วยเทคโนโลยี Computer Vision เพื่อช่วยเพิ่มประสิทธิภาพการจัดการสิ่งแวดล้อมในโรงเรียน',
-      "1. เพื่อศึกษาการจำแนกภาพด้วย AI\n2. เพื่อสร้างระบบแยกขยะลดปัญหาสิ่งแวดล้อมในโรงเรียน",
-      'Python, OpenCV, TensorFlow/YOLO, Raspberry Pi / Web Camera',
-      1, 8, 'open'
-    ],
-    [
-      'ระบบสมาร์ทฟาร์มรดน้ำและควบคุมความชื้นโรงเรือนผ่าน IoT',
-      'IoT & Smart Agriculture',
-      'สร้างระบบเซนเซอร์วัดความชื้นในดิน อุณหภูมิ และแสง ควบคุมวาล์วน้ำอัตโนมัติพร้อมรายงานผลผ่านสมาร์ตโฟนหรือแดชบอร์ดออนไลน์',
-      "1. เพื่อประหยัดทรัพยากรน้ำ\n2. เพื่อเพิ่มผลผลิตทางการเกษตรของแปลงทดลองโรงเรียน",
-      'ESP32/NodeMCU, DHT22, Soil Moisture Sensor, Blynk / MQTT, Web Dashboard',
-      1, 8, 'open'
-    ],
-    [
-      'เว็บไซต์และแพลตฟอร์มประชาสัมพันธ์ของดีชุมชนอำเภอเชียงยืน',
-      'Web Application',
-      'พัฒนาเว็บแอปพลิเคชันรวบรวมสถานที่ท่องเที่ยว สินค้า OTOP อาหารพื้นถิ่น และเส้นทางท่องเที่ยวเชิงวัฒนธรรมในอำเภอเชียงยืน จังหวัดมหาสารคาม',
-      "1. เพื่อส่งเสริมเศรษฐกิจชุมชนเชียงยืน\n2. เพื่อสร้างแหล่งข้อมูลดิจิทัลที่เข้าถึงง่ายสำหรับนักท่องเที่ยว",
-      'HTML5, Tailwind CSS, JavaScript, SQLite / Firebase, Google Maps API',
-      1, 8, 'open'
-    ],
-    [
-      'แอปพลิเคชันบันทึกรายรับ-รายจ่ายและวางแผนการเงินสำหรับวัยรุ่น',
-      'Mobile Application',
-      'แอปบันทึกการใช้จ่ายรายวัน วิเคราะห์แนวโน้มการออมเงิน และมีฟีเจอร์ตั้งเป้าหมายการเงินรายสัปดาห์/รายเดือน พร้อมสรุปเป็นกราฟที่เข้าใจง่าย',
-      "1. เพื่อสร้างวินัยทางการเงินแก่นักเรียน\n2. เพื่อให้เห็นพฤติกรรมการใช้จ่ายและเงินออม",
-      'Flutter / React Native / PWA, Chart.js, LocalStorage / SQLite',
-      1, 8, 'open'
-    ],
-    [
-      'ระบบจองยืม-คืนอุปกรณ์ห้องปฏิบัติการคอมพิวเตอร์ออนไลน์',
-      'Web Application',
-      'ระบบจัดการยืม-คืนอุปกรณ์เสริม อะแดปเตอร์ สายแปลง และโน้ตบุ๊ก พร้อมแจ้งเตือนกำหนดส่งคืนผ่านไลน์ และตรวจสอบสถานะอุปกรณ์ว่างแบบเรียลไทม์',
-      "1. เพื่อลดการสูญหายของอุปกรณ์คอมพิวเตอร์\n2. เพื่อความสะดวกรวดเร็วในการตรวจสอบประวัติการยืม-คืน",
-      'HTML/CSS/JS, Node.js / Python, SQLite, Line Notify API',
-      1, 8, 'open'
-    ],
-    [
-      'เกมตอบคำถาม 2D เสริมสร้างทักษะวิทยาการคำนวณและตรรกะ',
-      'Game Development',
-      'พัฒนาเกมตะลุยด่าน 2 มิติที่สอดแทรกแนวคิด Computational Thinking, การคิดเชิงคำนวณ และอัลกอริทึม สำหรับนักเรียนชั้นมัธยมศึกษา',
-      "1. เพื่อให้นักเรียนเรียนรู้วิทยาการคำนวณอย่างเพลิดเพลิน\n2. เพื่อพัฒนาทักษะการแก้ปัญหาเชิงตรรกะ",
-      'Construct 3 / Phaser.js / Godot, Pixel Art, WebGL',
-      1, 8, 'open'
-    ],
-    [
-      'ระบบแจ้งเตือนฝุ่น PM2.5 และสภาพอากาศรอบโรงเรียนเชียงยืนพิทยาคม',
-      'IoT & Environment',
-      'ติดตั้งสถานีตรวจวัดฝุ่นละออง PM2.5, PM10 และดัชนีคุณภาพอากาศ (AQI) บริเวณโรงเรียน พร้อมแสดงผลบนจอ LED และแจ้งเตือนเมื่อเกินเกณฑ์มาตรฐาน',
-      "1. เพื่อความปลอดภัยด้านสุขภาพของนักเรียนและครู\n2. เพื่อรวบรวมข้อมูลสถิติมลพิษทางอากาศในท้องถิ่น",
-      'ESP8266/ESP32, PMS5003 Dust Sensor, LCD Display, Line Notify, Chart.js',
-      1, 8, 'open'
-    ],
-    [
-      'แดชบอร์ดวิเคราะห์สถิติสุขภาพและดัชนีมวลกาย (BMI) ของนักเรียน',
-      'Data Analytics',
-      'ระบบบันทึกและประมวลผลข้อมูลสุขภาพ น้ำหนัก ส่วนสูง สมรรถภาพทางกาย แสดงผลแดชบอร์ดเปรียบเทียบค่าเฉลี่ยตามระดับชั้นและห้องเรียน พร้อมให้คำแนะนำด้านโภชนาการ',
-      "1. เพื่อส่งเสริมสุขภาวะที่ดีของนักเรียนในโรงเรียน\n2. เพื่อประยุกต์ใช้วิทยาการข้อมูล (Data Science) ในสถานศึกษา",
-      'Python, Pandas, Chart.js, SQLite, HTML5 Responsive Dashboard',
-      1, 8, 'open'
-    ],
-    [
-      'ระบบตรวจสอบการเข้าเรียนและการเข้าร่วมกิจกรรมด้วย QR Code',
-      'Web & Mobile',
-      'ระบบเช็คชื่อนักเรียนเข้าแถวตอนเช้าและกิจกรรมหน้าเสาธงผ่านบัตรนักเรียน QR Code แสดงสถิติการมาเรียน มาสาย ลา ขาด ทันที',
-      "1. เพื่อความสะดวกรวดเร็วในการเช็คชื่อและลดการใช้กระดาษ\n2. เพื่อแจ้งเตือนข้อมูลการเข้าเรียนแก่ครูที่ปรึกษา",
-      'HTML5 Camera Scanner, JavaScript (html5-qrcode), SQLite, Excel Export',
-      1, 8, 'open'
-    ],
-    [
-      'แอปพลิเคชันคลังคำศัพท์ภาษาอังกฤษสำหรับเตรียมสอบเข้ามหาวิทยาลัย (TGAT/A-Level)',
-      'Mobile Application',
-      'แอปพลิเคชัน Flashcard ช่วยจำคำศัพท์ภาษาอังกฤษ แบ่งตามระดับความยาก มีระบบ Space Repetition ทบทวนคำศัพท์ที่มักจำผิด และระบบทดสอบจำลอง',
-      "1. เพื่อยกระดับคะแนนภาษาอังกฤษของนักเรียน ม.ปลาย\n2. เพื่อสนับสนุนการเรียนรู้ด้วยตนเองทุกที่ทุกเวลา",
-      'Vue.js / React, Tailwind CSS, Web Storage, SpeechSynthesis API',
-      1, 8, 'open'
-    ],
-    [
-      'เว็บไซต์จำลองตลาดนัดโรงเรียนและการสั่งอาหารล่วงหน้า (School Canteen)',
-      'Web Application',
-      'ระบบสั่งจองอาหารกลางวันและเครื่องดื่มในโรงอาหารโรงเรียนล่วงหน้า เพื่อลดความแออัดในช่วงเวลาพักเที่ยง และบริหารสต็อกอาหารอย่างคุ้มค่า',
-      "1. เพื่อลดเวลาการรอคิวอาหารของนักเรียน\n2. เพื่อช่วยร้านค้าบริหารจัดการปริมาณวัตถุดิบได้แม่นยำ",
-      'HTML/CSS/JS, SQLite, Responsive Web Design, Order Management System',
-      1, 8, 'open'
-    ],
-    [
-      'แชทบอท AI แนะนำข้อมูลแผนการเรียนและกิจกรรมโรงเรียนเชียงยืนพิทยาคม',
-      'AI & Natural Language',
-      'ระบบตอบคำถามอัตโนมัติเกี่ยวกับหลักสูตรการเรียน แผนการเรียน ม.ปลาย กิจกรรมชมรม และปฏิทินการศึกษา ผ่านระบบโต้ตอบอัจฉริยะ',
-      "1. เพื่อให้บริการข้อมูลแก่นักเรียนและผู้ปกครองตลอด 24 ชม.\n2. เพื่อลดภาระงานประชาสัมพันธ์และแนะแนวของโรงเรียน",
-      'JavaScript / Python, NLP / Rule-based matching, Modern Chat UI',
-      1, 8, 'open'
-    ]
-  ]
-  seed_topics.each do |t|
-    db.execute(
-      'INSERT INTO project_topics (title, category, description, objectives, technologies, max_groups_per_room, max_groups_total, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      t
-    )
+if topics_count < 100
+  topics_json_path = File.join(__dir__, 'data', 'project_topics_100.json')
+  if File.exist?(topics_json_path)
+    seed_topics = JSON.parse(File.read(topics_json_path))
+    db.execute('DELETE FROM project_topics')
+    seed_topics.each do |t|
+      db.execute(
+        'INSERT INTO project_topics (id, topic_number, code, title, category, description, objectives, technologies, max_groups_per_room, max_groups_total, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [t['id'], t['topic_number'] || t['id'], t['code'], t['title'], t['category'], t['description'], t['objectives'], t['technologies'], 1, 1, t['status'] || 'open']
+      )
+    end
+    puts "Seeded #{seed_topics.size} project topics successfully."
   end
-  puts "Seeded #{seed_topics.size} project topics successfully."
 end
 
 # Helper to send JSON responses
@@ -1904,12 +1829,24 @@ server.mount_proc '/api' do |req, res|
               'created_at' => sel['created_at']
             }
           end
+
           selected_rooms = parsed_selections.map { |s| s['classroom'] }.uniq
           available_rooms = all_rooms - selected_rooms
-          max_groups = t['max_groups_total'] || 8
+          sel = parsed_selections.first
+          is_taken = !sel.nil?
+          taken_by = if is_taken
+            g_name = sel['group_name'].to_s.strip
+            g_name.empty? ? "#{sel['classroom']} กลุ่มที่ #{sel['group_number']}" : "#{sel['classroom']} กลุ่มที่ #{sel['group_number']} (#{g_name})"
+          else
+            nil
+          end
+
+          max_groups = t['max_groups_total'] || 1
 
           {
             'id' => t['id'],
+            'topic_number' => t['topic_number'] || t['id'],
+            'code' => t['code'] || "P#{t['id']}",
             'title' => t['title'],
             'category' => t['category'],
             'description' => t['description'],
@@ -1922,7 +1859,13 @@ server.mount_proc '/api' do |req, res|
             'selected_rooms' => selected_rooms,
             'available_rooms' => available_rooms,
             'selections_count' => parsed_selections.size,
-            'is_full' => (parsed_selections.size >= max_groups),
+            'is_full' => is_taken,
+            'is_taken' => is_taken,
+            'taken_by' => taken_by,
+            'taken_classroom' => sel ? sel['classroom'] : nil,
+            'taken_group' => sel ? sel['group_number'] : nil,
+            'taken_group_name' => sel ? sel['group_name'] : nil,
+            'taken_members' => sel ? sel['members'] : [],
             'selections' => parsed_selections
           }
         end
@@ -2123,22 +2066,25 @@ server.mount_proc '/api' do |req, res|
           next
         end
 
-        # Check if this classroom already selected this topic
+        # Check if topic is already selected by ANY room or group (Rule: 1 Topic = 1 Group total)
         existing_sel = db.get_first_row(
-          'SELECT id, group_number, group_name FROM project_selections WHERE topic_id = ? AND classroom = ?',
-          [topic_id, classroom]
+          'SELECT id, classroom, group_number, group_name FROM project_selections WHERE topic_id = ?',
+          [topic_id]
         )
         if existing_sel
-          g_info = existing_sel['group_name'].to_s.empty? ? "กลุ่มที่ #{existing_sel['group_number']}" : "กลุ่มที่ #{existing_sel['group_number']} (#{existing_sel['group_name']})"
-          send_error(res, "ห้อง #{classroom} ได้เลือกหัวข้อนี้ไปแล้วโดย #{g_info} (ไม่สามารถเลือกหัวข้อซ้ำในห้องเดียวกันได้ กรุณาเลือกหัวข้ออื่น)", 400)
+          g_name = existing_sel['group_name'].to_s.strip
+          g_info = g_name.empty? ? "กลุ่มที่ #{existing_sel['group_number']}" : "กลุ่มที่ #{existing_sel['group_number']} (#{g_name})"
+          send_error(res, "ขออภัย หัวข้อนี้ถูกห้อง #{existing_sel['classroom']} #{g_info} เลือกไปแล้ว ไม่สามารถเลือกซ้ำได้! กรุณาเลือกหัวข้ออื่น", 400)
           next
         end
 
-        # Check total groups cap
-        total_groups_now = db.get_first_value('SELECT COUNT(*) FROM project_selections WHERE topic_id = ?', [topic_id]) rescue 0
-        max_total = topic['max_groups_total'] || 8
-        if total_groups_now >= max_total
-          send_error(res, "หัวข้อนี้มีผู้ลงทะเบียนครบเต็มโควตาแล้ว (#{max_total} กลุ่ม) กรุณาเลือกหัวข้ออื่น", 400)
+        # Check if this group in this classroom already selected a topic
+        existing_grp = db.get_first_row(
+          'SELECT ps.id, pt.title FROM project_selections ps JOIN project_topics pt ON pt.id = ps.topic_id WHERE ps.classroom = ? AND ps.group_number = ?',
+          [classroom, group_number]
+        )
+        if existing_grp
+          send_error(res, "ห้อง #{classroom} กลุ่มที่ #{group_number} ได้ทำการลงทะเบียนหัวข้อโครงงานไปแล้ว (#{existing_grp['title']}) ไม่สามารถเลือกซ้ำได้", 400)
           next
         end
 
@@ -2166,6 +2112,30 @@ server.mount_proc '/api' do |req, res|
 
         if sanitized_members.empty?
           send_error(res, 'รายชื่อสมาชิกไม่ถูกต้อง กรุณาระบุชื่อ-นามสกุล', 400)
+          next
+        end
+
+        # Check if any member in sanitized_members is already registered in another group
+        existing_selections = db.execute('SELECT classroom, group_number, members_json FROM project_selections')
+        dup_member_error = nil
+        existing_selections.each do |es|
+          es_members = JSON.parse(es['members_json']) rescue []
+          sanitized_members.each do |sm|
+            matched = es_members.find do |em|
+              (!sm['student_id'].empty? && em['student_id'] == sm['student_id']) ||
+              (sm['student_number'] > 0 && es['classroom'] == classroom && em['student_number'] == sm['student_number']) ||
+              (!sm['name'].empty? && em['name'] == sm['name'])
+            end
+            if matched
+              dup_member_error = "นักเรียน '#{sm['name']}' ได้ลงทะเบียนในห้อง #{es['classroom']} กลุ่มที่ #{es['group_number']} ไปแล้ว ไม่สามารถอยู่ซ้ำกลุ่มอื่นได้"
+              break
+            end
+          end
+          break if dup_member_error
+        end
+
+        if dup_member_error
+          send_error(res, dup_member_error, 400)
           next
         end
 
