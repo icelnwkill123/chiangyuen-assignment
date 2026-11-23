@@ -19,6 +19,15 @@ let currentSearchQuery = '';
 // Selected file for submission
 let selectedFile = null;
 
+// Project Topic Selection State
+let currentStudentModule = 'assignments'; // 'assignments' or 'projects'
+let allProjectTopics = [];
+let allProjectSelections = [];
+let projectSelectedRoomFilter = '';
+let projectMatrixVisible = false;
+let currentTeacherProjectSubTab = 'topics'; // 'topics', 'selections', 'matrix'
+let currentBookingTopicId = null;
+
 // ==============================================
 // INITIALIZATION
 // ==============================================
@@ -44,6 +53,8 @@ function initAuthUI() {
 async function loadInitialData() {
   await fetchAssignments();
   await fetchStudentsList();
+  await fetchProjectTopics();
+  await fetchProjectSelections();
 }
 
 // ==============================================
@@ -228,6 +239,12 @@ function switchTeacherTab(tabName) {
     document.getElementById('tabBtnStudents').classList.add('active');
     document.getElementById('teacherTabContentStudents').classList.add('active');
     fetchStudentsList();
+  } else if (tabName === 'projects') {
+    const btnProjects = document.getElementById('tabBtnProjects');
+    const panelProjects = document.getElementById('teacherTabContentProjects');
+    if (btnProjects) btnProjects.classList.add('active');
+    if (panelProjects) panelProjects.classList.add('active');
+    loadTeacherProjectsTab();
   }
 }
 
@@ -270,6 +287,9 @@ async function fetchStats() {
     if (document.getElementById('statSubmissions')) document.getElementById('statSubmissions').textContent = stats.submissions_count || 0;
     if (document.getElementById('statPending')) document.getElementById('statPending').textContent = stats.pending_count || 0;
     if (document.getElementById('statGraded')) document.getElementById('statGraded').textContent = stats.graded_count || 0;
+    if (document.getElementById('tabCountProjects')) document.getElementById('tabCountProjects').textContent = stats.topics_count || 0;
+    if (document.getElementById('tStatTopicsCount')) document.getElementById('tStatTopicsCount').textContent = stats.topics_count || 0;
+    if (document.getElementById('tStatGroupsCount')) document.getElementById('tStatGroupsCount').textContent = stats.project_selections_count || 0;
   } catch (err) {
     console.error(err);
   }
@@ -2097,3 +2117,1093 @@ function escapeHtml(str) {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
 }
+
+// ==============================================
+// PROJECT TOPIC SELECTION SYSTEM (ม.5/1 - ม.5/8)
+// ==============================================
+
+function switchStudentModule(moduleName) {
+  currentStudentModule = moduleName;
+  const btnAssign = document.getElementById('btnStudentTabAssignments');
+  const btnProj = document.getElementById('btnStudentTabProjects');
+  const panelAssign = document.getElementById('studentModuleAssignments');
+  const panelProj = document.getElementById('studentModuleProjects');
+
+  if (moduleName === 'projects') {
+    if (btnAssign) btnAssign.classList.remove('active');
+    if (btnProj) btnProj.classList.add('active');
+    if (panelAssign) {
+      panelAssign.style.display = 'none';
+      panelAssign.classList.remove('active');
+    }
+    if (panelProj) {
+      panelProj.style.display = 'block';
+      panelProj.classList.add('active');
+    }
+    fetchProjectTopics();
+  } else {
+    if (btnProj) btnProj.classList.remove('active');
+    if (btnAssign) btnAssign.classList.add('active');
+    if (panelProj) {
+      panelProj.style.display = 'none';
+      panelProj.classList.remove('active');
+    }
+    if (panelAssign) {
+      panelAssign.style.display = 'block';
+      panelAssign.classList.add('active');
+    }
+  }
+}
+
+async function fetchProjectTopics() {
+  try {
+    const res = await fetch('/api/projects/topics');
+    if (!res.ok) throw new Error('ไม่สามารถโหลดข้อมูลหัวข้อโครงงานได้');
+    const data = await res.json();
+    allProjectTopics = data.topics || [];
+
+    // Calculate Summary Stats
+    const totalTopics = allProjectTopics.length;
+    let totalGroups = 0;
+    let totalStudentsInGroups = 0;
+    const activeRoomsSet = new Set();
+
+    allProjectTopics.forEach(t => {
+      totalGroups += (t.selections_count || 0);
+      if (t.selections) {
+        t.selections.forEach(s => {
+          activeRoomsSet.add(s.classroom);
+          if (s.members && Array.isArray(s.members)) {
+            totalStudentsInGroups += s.members.length;
+          }
+        });
+      }
+    });
+
+    // Update UI Stats Badges
+    const statTotalTopicsEl = document.getElementById('statTotalTopics');
+    if (statTotalTopicsEl) statTotalTopicsEl.textContent = totalTopics;
+
+    const statSelectedGroupsEl = document.getElementById('statSelectedGroups');
+    if (statSelectedGroupsEl) statSelectedGroupsEl.textContent = totalGroups;
+
+    const statParticipatingStudentsEl = document.getElementById('statParticipatingStudents');
+    if (statParticipatingStudentsEl) statParticipatingStudentsEl.textContent = totalStudentsInGroups;
+
+    const tabCount = document.getElementById('tabCountProjects');
+    if (tabCount) tabCount.textContent = totalTopics;
+
+    const tStatTopicsCountEl = document.getElementById('tStatTopicsCount');
+    if (tStatTopicsCountEl) tStatTopicsCountEl.textContent = totalTopics;
+
+    const tStatGroupsCountEl = document.getElementById('tStatGroupsCount');
+    if (tStatGroupsCountEl) tStatGroupsCountEl.textContent = totalGroups;
+
+    const tStatStudentsCountEl = document.getElementById('tStatStudentsCount');
+    if (tStatStudentsCountEl) tStatStudentsCountEl.textContent = totalStudentsInGroups;
+
+    const tStatActiveRoomsEl = document.getElementById('tStatActiveRooms');
+    if (tStatActiveRoomsEl) tStatActiveRoomsEl.textContent = `${activeRoomsSet.size} / 8`;
+
+    const tSubTopicsCountEl = document.getElementById('tSubTopicsCount');
+    if (tSubTopicsCountEl) tSubTopicsCountEl.textContent = totalTopics;
+
+    renderProjectTopics();
+    if (projectMatrixVisible) {
+      renderProjectMatrix();
+    }
+  } catch (err) {
+    console.error('fetchProjectTopics error:', err);
+  }
+}
+
+async function fetchProjectSelections() {
+  try {
+    const res = await fetch('/api/projects/selections');
+    if (!res.ok) return;
+    const data = await res.json();
+    allProjectSelections = data.selections || [];
+
+    const tSubSelectionsCountEl = document.getElementById('tSubSelectionsCount');
+    if (tSubSelectionsCountEl) tSubSelectionsCountEl.textContent = allProjectSelections.length;
+  } catch (err) {
+    console.error('fetchProjectSelections error:', err);
+  }
+}
+
+function setProjectRoomFilter(room) {
+  projectSelectedRoomFilter = room;
+  const chips = document.querySelectorAll('#projectRoomFilterChips .room-chip');
+  chips.forEach(chip => {
+    if (room === '' && chip.textContent.includes('ทั้งหมด')) {
+      chip.classList.add('active');
+    } else if (chip.textContent === room) {
+      chip.classList.add('active');
+    } else {
+      chip.classList.remove('active');
+    }
+  });
+  renderProjectTopics();
+}
+
+function filterProjectTopics() {
+  renderProjectTopics();
+}
+
+function renderProjectTopics() {
+  const container = document.getElementById('projectTopicsGrid');
+  if (!container) return;
+
+  const searchQuery = (document.getElementById('projectSearchInput')?.value || '').trim().toLowerCase();
+  const categoryFilter = document.getElementById('projectCategoryFilter')?.value || '';
+  const availabilityFilter = document.getElementById('projectAvailabilityFilter')?.value || 'all';
+
+  let filtered = allProjectTopics.filter(t => {
+    // Search query filter
+    if (searchQuery) {
+      const matchTitle = (t.title || '').toLowerCase().includes(searchQuery);
+      const matchCat = (t.category || '').toLowerCase().includes(searchQuery);
+      const matchTech = (t.technologies || '').toLowerCase().includes(searchQuery);
+      const matchDesc = (t.description || '').toLowerCase().includes(searchQuery);
+      if (!matchTitle && !matchCat && !matchTech && !matchDesc) return false;
+    }
+
+    // Category filter
+    if (categoryFilter && t.category !== categoryFilter) return false;
+
+    // Room Filter: If specific room selected
+    if (projectSelectedRoomFilter) {
+      const roomSelectedIt = (t.selected_rooms || []).includes(projectSelectedRoomFilter);
+      if (availabilityFilter === 'available' && roomSelectedIt) return false;
+      if (availabilityFilter === 'selected' && !roomSelectedIt) return false;
+    } else {
+      if (availabilityFilter === 'available' && t.is_full) return false;
+      if (availabilityFilter === 'selected' && (t.selections_count || 0) === 0) return false;
+    }
+
+    return true;
+  });
+
+  if (filtered.length === 0) {
+    container.innerHTML = `
+      <div class="empty-state-card" style="grid-column: 1 / -1; padding: 3rem 1.5rem; text-align: center; background: #ffffff; border-radius: 16px; border: 1px dashed var(--slate-300);">
+        <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">🔍</div>
+        <h3 style="color: var(--slate-700); margin-bottom: 0.25rem;">ไม่พบหัวข้อโครงงานที่ตรงกับเงื่อนไข</h3>
+        <p class="text-muted" style="font-size: 0.9rem;">ลองเปลี่ยนคำค้นหา หรือเลือกตัวกรองห้องเรียน/หมวดหมู่อื่น</p>
+        <button class="btn btn-outline-secondary mt-2" onclick="setProjectRoomFilter(''); document.getElementById('projectSearchInput').value=''; document.getElementById('projectCategoryFilter').value=''; document.getElementById('projectAvailabilityFilter').value='all'; renderProjectTopics();">
+          ล้างตัวกรองทั้งหมด
+        </button>
+      </div>
+    `;
+    return;
+  }
+
+  const allM5Rooms = ['ม.5/1', 'ม.5/2', 'ม.5/3', 'ม.5/4', 'ม.5/5', 'ม.5/6', 'ม.5/7', 'ม.5/8'];
+
+  container.innerHTML = filtered.map(t => {
+    const selectedRooms = t.selected_rooms || [];
+    const availableRooms = allM5Rooms.filter(r => !selectedRooms.includes(r));
+    const isFull = t.is_full || selectedRooms.length >= (t.max_groups_total || 8);
+    const isOpen = (t.status || 'open') === 'open' && !isFull;
+
+    // Build Badges for Rooms that ALREADY picked this topic ("หัวข้อนี้ ม.5 ห้องไหนเลือกไปแล้ว")
+    let selectedRoomsHtml = '';
+    if (selectedRooms.length === 0) {
+      selectedRoomsHtml = `<span class="room-pill-available">✨ ยังไม่มีห้องใดเลือก (ว่างสำหรับทุกห้อง ม.5/1 - 8)</span>`;
+    } else {
+      selectedRoomsHtml = (t.selections || []).map(sel => {
+        const memCount = sel.members ? sel.members.length : 0;
+        const gName = sel.group_name ? `: ${escapeHtml(sel.group_name)}` : '';
+        return `
+          <button type="button" class="room-pill-selected" onclick="openTopicDetailsModal(${t.id})" title="คลิกดูรายชื่อสมาชิกกลุ่ม ${sel.classroom}">
+            <span class="pill-dot"></span>
+            <span>${escapeHtml(sel.classroom)} (กลุ่ม ${sel.group_number}${gName})</span>
+            <span style="opacity:0.85; font-size:0.75rem;">👥 ${memCount} คน</span>
+          </button>
+        `;
+      }).join('');
+    }
+
+    // Build Available Rooms pills
+    let availableRoomsHtml = '';
+    if (availableRooms.length === 0) {
+      availableRoomsHtml = `<span class="room-pill-all-taken">⚠️ มีผู้เลือกครบทุกห้องแล้ว (เต็ม)</span>`;
+    } else {
+      availableRoomsHtml = availableRooms.map(r => `<span class="room-pill-available">${escapeHtml(r)}</span>`).join('');
+    }
+
+    // Recommended Tech Chips
+    let techChipsHtml = '';
+    if (t.technologies) {
+      const techList = t.technologies.split(/,|、|\n/).map(s => s.trim()).filter(s => s.length > 0);
+      techChipsHtml = `
+        <div class="topic-tech-box">
+          <div class="topic-tech-label">เทคโนโลยี / เครื่องมือ:</div>
+          <div class="topic-tech-chips">
+            ${techList.map(tc => `<span class="tech-chip">${escapeHtml(tc)}</span>`).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    return `
+      <div class="project-topic-card" id="projectTopicCard-${t.id}">
+        <div class="topic-card-header">
+          <span class="topic-category-tag">${escapeHtml(t.category)}</span>
+          <span class="topic-status-badge ${isOpen ? 'open' : 'closed'}">
+            ${isOpen ? `🟢 เปิดรับ (${selectedRooms.length}/${t.max_groups_total || 8} ห้อง)` : '🔴 เต็มแล้ว/ปิดรับ'}
+          </span>
+        </div>
+
+        <h3 class="topic-card-title">${escapeHtml(t.title)}</h3>
+        <p class="topic-card-desc">${escapeHtml(t.description || 'ไม่มีคำอธิบายเพิ่มเติม')}</p>
+
+        ${techChipsHtml}
+
+        <!-- KEY SECTION: Room Status Box (หัวข้อนี้ ม.5 ห้องไหนเลือกไปแล้ว) -->
+        <div class="room-status-box">
+          <div class="room-status-heading">
+            <span>🏷️ ม.5 ห้องที่เลือกหัวข้อนี้ไปแล้ว (${selectedRooms.length} ห้อง):</span>
+          </div>
+          <div class="room-selected-group">
+            ${selectedRoomsHtml}
+          </div>
+
+          <div class="room-available-group">
+            <span class="room-avail-label">ยังว่างสำหรับห้อง:</span>
+            ${availableRoomsHtml}
+          </div>
+        </div>
+
+        <div class="topic-card-actions">
+          <button type="button" class="btn-select-topic" onclick="openProjectSelectModal(${t.id})" ${!isOpen ? 'disabled style="opacity:0.6; cursor:not-allowed;"' : ''}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>
+            <span>📌 ลงทะเบียนเลือกหัวข้อนี้</span>
+          </button>
+          <button type="button" class="btn-topic-details" onclick="openTopicDetailsModal(${t.id})" title="ดูรายละเอียดกลุ่มและสมาชิก">
+            <span>👥 ดูข้อมูลกลุ่ม</span>
+          </button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function renderProjectMatrix() {
+  const table = document.getElementById('projectMatrixTable');
+  const teacherTable = document.getElementById('teacherMatrixTable');
+  const targetTables = [table, teacherTable].filter(Boolean);
+  if (targetTables.length === 0) return;
+
+  const allM5Rooms = ['ม.5/1', 'ม.5/2', 'ม.5/3', 'ม.5/4', 'ม.5/5', 'ม.5/6', 'ม.5/7', 'ม.5/8'];
+
+  let headerHtml = `
+    <thead>
+      <tr>
+        <th style="width: 40px;">#</th>
+        <th class="col-topic-name">หัวข้อโครงงาน</th>
+        <th style="width: 130px;">หมวดหมู่</th>
+        ${allM5Rooms.map(r => `<th style="width: 75px;">${r}</th>`).join('')}
+        <th style="width: 80px;">รวมที่เลือก</th>
+      </tr>
+    </thead>
+  `;
+
+  let rowsHtml = '';
+  allProjectTopics.forEach((t, idx) => {
+    const selMap = {};
+    (t.selections || []).forEach(s => {
+      selMap[s.classroom] = s;
+    });
+
+    const roomCells = allM5Rooms.map(r => {
+      const sel = selMap[r];
+      if (sel) {
+        const titleTooltip = `กลุ่มที่ ${sel.group_number}${sel.group_name ? ' (' + escapeHtml(sel.group_name) + ')' : ''} สมาชิก ${sel.members ? sel.members.length : 0} คน`;
+        return `
+          <td>
+            <span class="matrix-badge-selected" onclick="openTopicDetailsModal(${t.id})" title="${titleTooltip}">
+              ✔ กลุ่ม ${sel.group_number}
+            </span>
+          </td>
+        `;
+      } else {
+        return `<td><span class="matrix-badge-empty">-</span></td>`;
+      }
+    }).join('');
+
+    const count = (t.selected_rooms || []).length;
+    const badgeClass = count > 0 ? 'badge-success' : 'badge-secondary';
+
+    rowsHtml += `
+      <tr>
+        <td style="font-weight: 600; color: var(--slate-500);">${idx + 1}</td>
+        <td class="col-topic-name">
+          <a href="javascript:void(0)" onclick="openTopicDetailsModal(${t.id})" style="font-weight: 700; color: var(--school-green-dark); text-decoration: none;">
+            ${escapeHtml(t.title)}
+          </a>
+        </td>
+        <td><span class="topic-category-tag" style="font-size: 0.72rem;">${escapeHtml(t.category)}</span></td>
+        ${roomCells}
+        <td>
+          <span class="badge ${badgeClass}" style="font-weight: 700;">
+            ${count} / 8 ห้อง
+          </span>
+        </td>
+      </tr>
+    `;
+  });
+
+  const fullHtml = headerHtml + `<tbody>${rowsHtml}</tbody>`;
+  targetTables.forEach(tbl => {
+    tbl.innerHTML = fullHtml;
+  });
+}
+
+function toggleMatrixView() {
+  projectMatrixVisible = !projectMatrixVisible;
+  const sec = document.getElementById('projectMatrixSection');
+  const btnText = document.getElementById('btnMatrixToggleText');
+  if (sec) {
+    sec.style.display = projectMatrixVisible ? 'block' : 'none';
+    if (projectMatrixVisible) {
+      renderProjectMatrix();
+      sec.scrollIntoView({ behavior: 'smooth' });
+    }
+  }
+  if (btnText) {
+    btnText.textContent = projectMatrixVisible ? '✕ ปิดตารางสรุป Matrix' : '📊 ดูตารางสรุปภาพรวม Matrix (ห้อง 1 - 8)';
+  }
+}
+
+// Student Selection Modal Logic
+function openProjectSelectModal(topicId) {
+  let targetTopic = null;
+  if (topicId) {
+    targetTopic = allProjectTopics.find(t => t.id === topicId);
+  } else if (allProjectTopics.length > 0) {
+    targetTopic = allProjectTopics[0];
+  }
+
+  if (!targetTopic) {
+    showToast('กรุณารอโหลดข้อมูลหัวข้อโครงงานสักครู่', 'warning');
+    return;
+  }
+
+  currentBookingTopicId = targetTopic.id;
+
+  // Fill summary card
+  const titleEl = document.getElementById('selModalTitle');
+  const catEl = document.getElementById('selModalCategory');
+  const descEl = document.getElementById('selModalDesc');
+  const quotaEl = document.getElementById('selModalQuota');
+
+  if (titleEl) titleEl.textContent = targetTopic.title;
+  if (catEl) catEl.textContent = targetTopic.category;
+  if (descEl) descEl.textContent = targetTopic.description || 'ไม่มีคำอธิบายเพิ่มเติม';
+  if (quotaEl) quotaEl.textContent = `โควตา: ห้องละ ${targetTopic.max_groups_per_room || 1} กลุ่ม (รวมไม่เกิน ${targetTopic.max_groups_total || 8} ห้อง)`;
+
+  // Reset form
+  const form = document.getElementById('projectSelectForm');
+  if (form) form.reset();
+
+  const alertBox = document.getElementById('selRoomStatusAlert');
+  if (alertBox) {
+    alertBox.style.display = 'none';
+    alertBox.innerHTML = '';
+  }
+
+  const submitBtn = document.getElementById('btnSubmitProjectSelection');
+  if (submitBtn) {
+    submitBtn.disabled = false;
+    submitBtn.style.opacity = '1';
+  }
+
+  // Pre-fill classroom if filter active
+  const roomSelect = document.getElementById('selClassroom');
+  if (roomSelect && projectSelectedRoomFilter) {
+    roomSelect.value = projectSelectedRoomFilter;
+  }
+
+  // Initialize Member Rows
+  const membersContainer = document.getElementById('projectMembersListContainer');
+  if (membersContainer) {
+    membersContainer.innerHTML = '';
+    addProjectMemberRow(); // Add first member row
+  }
+
+  handleProjectRoomSelectChange();
+  openModal('modalProjectSelect');
+}
+
+function handleProjectRoomSelectChange() {
+  const roomSelect = document.getElementById('selClassroom');
+  const alertBox = document.getElementById('selRoomStatusAlert');
+  const submitBtn = document.getElementById('btnSubmitProjectSelection');
+  if (!roomSelect) return;
+
+  const selectedRoom = roomSelect.value;
+  const targetTopic = allProjectTopics.find(t => t.id === currentBookingTopicId);
+
+  if (targetTopic && selectedRoom) {
+    const existingSel = (targetTopic.selections || []).find(s => s.classroom === selectedRoom);
+    if (existingSel) {
+      if (alertBox) {
+        const gName = existingSel.group_name ? ` (${escapeHtml(existingSel.group_name)})` : '';
+        alertBox.innerHTML = `
+          <strong>⚠️ ห้อง ${escapeHtml(selectedRoom)} ได้ลงทะเบียนเลือกหัวข้อนี้ไปแล้ว!</strong><br>
+          โดยกลุ่มที่ ${existingSel.group_number}${gName} (สมาชิก ${existingSel.members ? existingSel.members.length : 0} คน)<br>
+          <span style="font-size:0.85rem;">ตามกติกา แต่ละห้องสามารถเลือกได้ห้องละ 1 กลุ่มเท่านั้น กรุณาเลือกหัวข้อโครงงานอื่นที่ยังว่าง</span>
+        `;
+        alertBox.style.display = 'block';
+      }
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.style.opacity = '0.5';
+      }
+    } else {
+      if (alertBox) alertBox.style.display = 'none';
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.style.opacity = '1';
+      }
+    }
+  } else {
+    if (alertBox) alertBox.style.display = 'none';
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.style.opacity = '1';
+    }
+  }
+
+  // Update student options in member selects
+  updateMemberSelectDropdowns();
+}
+
+function updateMemberSelectDropdowns() {
+  const selectedRoom = document.getElementById('selClassroom')?.value || '';
+  const memberSelects = document.querySelectorAll('.member-student-select');
+
+  // Filter students from the selected room
+  const roomStudents = selectedRoom 
+    ? allStudents.filter(s => s.classroom === selectedRoom)
+    : allStudents;
+
+  memberSelects.forEach(select => {
+    const currentVal = select.value;
+    let html = `<option value="">-- เลือกนักเรียน ${selectedRoom ? `(${selectedRoom})` : ''} --</option>`;
+
+    roomStudents.forEach(st => {
+      const numStr = st.student_number ? `เลขที่ ${st.student_number}` : '';
+      const sidStr = st.student_id ? `[${st.student_id}]` : '';
+      html += `<option value="${st.student_id}" data-num="${st.student_number || 0}" data-name="${escapeHtml(st.name)}" data-sid="${st.student_id}">
+        ${numStr} ${sidStr} ${escapeHtml(st.name)}
+      </option>`;
+    });
+
+    select.innerHTML = html;
+    if (currentVal) select.value = currentVal;
+  });
+}
+
+function addProjectMemberRow(prefillStudentId = '') {
+  const container = document.getElementById('projectMembersListContainer');
+  if (!container) return;
+
+  const currentCount = container.querySelectorAll('.member-row').length;
+  if (currentCount >= 6) {
+    showToast('กลุ่มโครงงานกำหนดสมาชิกได้ไม่เกิน 6 คน', 'warning');
+    return;
+  }
+
+  const nextIndex = currentCount + 1;
+  const row = document.createElement('div');
+  row.className = 'member-row';
+  row.id = `memberRow-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
+
+  const selectedRoom = document.getElementById('selClassroom')?.value || '';
+  const roomStudents = selectedRoom 
+    ? allStudents.filter(s => s.classroom === selectedRoom)
+    : allStudents;
+
+  let optionsHtml = `<option value="">-- เลือกนักเรียน ${selectedRoom ? `(${selectedRoom})` : ''} --</option>`;
+  roomStudents.forEach(st => {
+    const numStr = st.student_number ? `เลขที่ ${st.student_number}` : '';
+    const sidStr = st.student_id ? `[${st.student_id}]` : '';
+    optionsHtml += `<option value="${st.student_id}" data-num="${st.student_number || 0}" data-name="${escapeHtml(st.name)}" data-sid="${st.student_id}">
+      ${numStr} ${sidStr} ${escapeHtml(st.name)}
+    </option>`;
+  });
+
+  row.innerHTML = `
+    <span class="member-row-num">#${nextIndex}</span>
+    <select class="member-student-select" required>
+      ${optionsHtml}
+    </select>
+    ${nextIndex > 1 ? `
+      <button type="button" class="btn-remove-member" onclick="removeProjectMemberRow(this)" title="ลบสมาชิกคนนี้">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+      </button>
+    ` : '<div style="width: 28px;"></div>'}
+  `;
+
+  container.appendChild(row);
+
+  if (prefillStudentId) {
+    const sel = row.querySelector('.member-student-select');
+    if (sel) sel.value = prefillStudentId;
+  }
+
+  updateMemberCountBadge();
+}
+
+function removeProjectMemberRow(btn) {
+  const row = btn.closest('.member-row');
+  if (row) {
+    row.remove();
+    // Re-index remaining rows
+    const container = document.getElementById('projectMembersListContainer');
+    if (container) {
+      container.querySelectorAll('.member-row').forEach((r, idx) => {
+        const numSpan = r.querySelector('.member-row-num');
+        if (numSpan) numSpan.textContent = `#${idx + 1}`;
+      });
+    }
+    updateMemberCountBadge();
+  }
+}
+
+function updateMemberCountBadge() {
+  const container = document.getElementById('projectMembersListContainer');
+  const badge = document.getElementById('memberCountBadge');
+  if (container && badge) {
+    badge.textContent = container.querySelectorAll('.member-row').length;
+  }
+}
+
+async function handleProjectSelectionSubmit(event) {
+  event.preventDefault();
+
+  if (!currentBookingTopicId) {
+    showToast('กรุณาเลือกหัวข้อโครงงานก่อน', 'error');
+    return;
+  }
+
+  const classroom = document.getElementById('selClassroom')?.value;
+  const groupNumber = parseInt(document.getElementById('selGroupNumber')?.value || '0', 10);
+  const groupName = (document.getElementById('selGroupName')?.value || '').trim();
+  const customTitle = (document.getElementById('selCustomTitle')?.value || '').trim();
+  const advisor = (document.getElementById('selAdvisor')?.value || '').trim();
+  const note = (document.getElementById('selNote')?.value || '').trim();
+
+  if (!classroom) {
+    showToast('กรุณาเลือกห้องเรียนของกลุ่มท่าน', 'warning');
+    return;
+  }
+
+  if (groupNumber <= 0) {
+    showToast('กรุณาระบุหมายเลขกลุ่มที่ถูกต้อง', 'warning');
+    return;
+  }
+
+  // Gather members
+  const memberSelects = document.querySelectorAll('#projectMembersListContainer .member-student-select');
+  const members = [];
+  const selectedSids = new Set();
+
+  for (let sel of memberSelects) {
+    const sid = sel.value;
+    if (!sid) continue;
+
+    if (selectedSids.has(sid)) {
+      showToast('มีรายชื่อสมาชิกซ้ำกันในกลุ่ม กรุณาตรวจสอบ', 'warning');
+      return;
+    }
+    selectedSids.add(sid);
+
+    const opt = sel.options[sel.selectedIndex];
+    members.push({
+      student_id: sid,
+      student_number: parseInt(opt.getAttribute('data-num') || '0', 10),
+      name: opt.getAttribute('data-name') || ''
+    });
+  }
+
+  if (members.length === 0) {
+    showToast('กรุณาเลือกรายชื่อสมาชิกกลุ่มอย่างน้อย 1 คน', 'warning');
+    return;
+  }
+
+  const submitBtn = document.getElementById('btnSubmitProjectSelection');
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = 'กำลังบันทึกข้อมูล...';
+  }
+
+  try {
+    const res = await fetch('/api/projects/select', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        topic_id: currentBookingTopicId,
+        classroom: classroom,
+        group_number: groupNumber,
+        group_name: groupName,
+        custom_title: customTitle,
+        advisor: advisor,
+        note: note,
+        members: members
+      })
+    });
+
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      throw new Error(data.error || 'เกิดข้อผิดพลาดในการลงทะเบียน');
+    }
+
+    showToast(`✅ ลงทะเบียนสำเร็จ! ห้อง ${classroom} กลุ่มที่ ${groupNumber}`, 'success');
+    closeModal('modalProjectSelect');
+    await fetchProjectTopics();
+    await fetchProjectSelections();
+
+    // Scroll to the booked card
+    const bookedCard = document.getElementById(`projectTopicCard-${currentBookingTopicId}`);
+    if (bookedCard) {
+      bookedCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      bookedCard.style.outline = '3px solid var(--school-green)';
+      setTimeout(() => { bookedCard.style.outline = ''; }, 3000);
+    }
+  } catch (err) {
+    showToast(err.message, 'error');
+  } finally {
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = `
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+        <span>ยืนยันการเลือกหัวข้อโครงงาน</span>
+      `;
+    }
+  }
+}
+
+// Topic Details Modal
+function openTopicDetailsModal(topicId) {
+  const topic = allProjectTopics.find(t => t.id === topicId);
+  if (!topic) return;
+
+  currentBookingTopicId = topic.id;
+  const body = document.getElementById('projectDetailsModalBody');
+  if (!body) return;
+
+  const selections = topic.selections || [];
+  const selectedRooms = topic.selected_rooms || [];
+  const allM5Rooms = ['ม.5/1', 'ม.5/2', 'ม.5/3', 'ม.5/4', 'ม.5/5', 'ม.5/6', 'ม.5/7', 'ม.5/8'];
+  const availableRooms = allM5Rooms.filter(r => !selectedRooms.includes(r));
+
+  let groupsHtml = '';
+  if (selections.length === 0) {
+    groupsHtml = `
+      <div class="empty-state-card" style="padding: 2rem; text-align: center; background: var(--slate-50); border-radius: 12px; border: 1px dashed var(--slate-300);">
+        <p class="text-muted m-0">ยังไม่มีห้องใดลงทะเบียนเลือกหัวข้อนี้ (ว่างทุกห้อง ม.5/1 - 8)</p>
+      </div>
+    `;
+  } else {
+    groupsHtml = selections.map(sel => {
+      const members = sel.members || [];
+      const memberRows = members.map(m => `
+        <tr>
+          <td style="width: 70px; text-align: center;">${m.student_number ? `เลขที่ ${m.student_number}` : '-'}</td>
+          <td style="width: 120px;"><code>${escapeHtml(m.student_id)}</code></td>
+          <td><strong>${escapeHtml(m.name)}</strong></td>
+        </tr>
+      `).join('');
+
+      return `
+        <div class="card mb-3 p-3" style="border: 1px solid var(--school-green-border); border-left: 4px solid var(--school-green); background: #ffffff;">
+          <div class="d-flex justify-between align-center mb-2 flex-wrap gap-2">
+            <div class="d-flex align-center gap-2">
+              <span class="badge badge-success" style="font-size: 0.9rem; padding: 0.35rem 0.65rem;">
+                📍 ห้อง ${escapeHtml(sel.classroom)}
+              </span>
+              <span style="font-weight: 800; font-size: 1rem; color: var(--slate-800);">
+                กลุ่มที่ ${sel.group_number} ${sel.group_name ? `(${escapeHtml(sel.group_name)})` : ''}
+              </span>
+            </div>
+            <span class="text-muted text-xs">${formatThaiDateTime(sel.created_at)}</span>
+          </div>
+
+          ${sel.custom_title ? `
+            <div class="mb-2" style="font-size: 0.88rem; color: var(--school-green-dark);">
+              <strong>ชื่อโครงงานที่เสนอ:</strong> ${escapeHtml(sel.custom_title)}
+            </div>
+          ` : ''}
+
+          <div class="table-responsive mt-2">
+            <table class="table" style="font-size: 0.85rem; width: 100%;">
+              <thead>
+                <tr style="background: var(--slate-100);">
+                  <th style="width: 70px; text-align: center;">เลขที่</th>
+                  <th style="width: 120px;">รหัสนักเรียน</th>
+                  <th>ชื่อ - นามสกุลสมาชิกในกลุ่ม (${members.length} คน)</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${memberRows}
+              </tbody>
+            </table>
+          </div>
+
+          ${(sel.advisor || sel.note) ? `
+            <div class="d-flex gap-3 text-xs text-muted mt-2 pt-2 border-top">
+              ${sel.advisor ? `<div>👨‍🏫 <strong>ครูที่ปรึกษา:</strong> ${escapeHtml(sel.advisor)}</div>` : ''}
+              ${sel.note ? `<div>📝 <strong>หมายเหตุ:</strong> ${escapeHtml(sel.note)}</div>` : ''}
+            </div>
+          ` : ''}
+        </div>
+      `;
+    }).join('');
+  }
+
+  body.innerHTML = `
+    <div class="topic-selection-summary-card mb-3">
+      <div class="d-flex justify-between align-center mb-2">
+        <span class="badge-tag-project">${escapeHtml(topic.category)}</span>
+        <span class="badge badge-success">เลือกแล้ว ${selectedRooms.length} / ${topic.max_groups_total || 8} ห้อง</span>
+      </div>
+      <h3 style="margin: 0.25rem 0 0.5rem 0; font-size: 1.25rem; color: var(--school-green-dark);">${escapeHtml(topic.title)}</h3>
+      <p style="margin: 0; font-size: 0.9rem; color: var(--slate-700); line-height: 1.5;">${escapeHtml(topic.description || '')}</p>
+      
+      ${topic.objectives ? `
+        <div class="mt-2 text-xs" style="color: var(--slate-600); background: rgba(255,255,255,0.7); padding: 0.5rem; border-radius: 6px;">
+          <strong>🎯 วัตถุประสงค์:</strong><br>${escapeHtml(topic.objectives).replace(/\n/g, '<br>')}
+        </div>
+      ` : ''}
+      
+      ${topic.technologies ? `
+        <div class="mt-2 text-xs text-muted">
+          <strong>🛠️ เทคโนโลยีที่เกี่ยวข้อง:</strong> ${escapeHtml(topic.technologies)}
+        </div>
+      ` : ''}
+    </div>
+
+    <!-- Room Summary Pills in Modal -->
+    <div class="room-status-box mb-3">
+      <div class="room-status-heading">
+        <span>🏷️ สถานะแยกตามห้อง ม.5:</span>
+      </div>
+      <div class="d-flex gap-1 flex-wrap mb-2">
+        <span class="text-xs text-muted" style="min-width: 90px;">ห้องที่เลือกแล้ว:</span>
+        ${selectedRooms.length > 0 
+          ? selectedRooms.map(r => `<span class="badge badge-success">${escapeHtml(r)} 🟢</span>`).join(' ')
+          : '<span class="text-muted text-xs">ยังไม่มี</span>'
+        }
+      </div>
+      <div class="d-flex gap-1 flex-wrap">
+        <span class="text-xs text-muted" style="min-width: 90px;">ยังว่างสำหรับห้อง:</span>
+        ${availableRooms.length > 0 
+          ? availableRooms.map(r => `<span class="room-pill-available">${escapeHtml(r)}</span>`).join(' ')
+          : '<span class="text-danger text-xs">เต็มแล้วทุกห้อง</span>'
+        }
+      </div>
+    </div>
+
+    <h4 style="margin: 1.25rem 0 0.75rem 0; font-size: 1.05rem; color: var(--slate-800);">
+      👥 รายชื่อกลุ่มและสมาชิกที่ลงทะเบียน (${selections.length} กลุ่ม):
+    </h4>
+    ${groupsHtml}
+  `;
+
+  openModal('modalProjectDetails');
+}
+
+function handleSelectFromDetailsModal() {
+  closeModal('modalProjectDetails');
+  if (currentBookingTopicId) {
+    openProjectSelectModal(currentBookingTopicId);
+  }
+}
+
+// Teacher Project Management Tab
+function switchTeacherProjectSubTab(subTab) {
+  currentTeacherProjectSubTab = subTab;
+  const btnTopics = document.getElementById('btnTeacherSubTopics');
+  const btnSelections = document.getElementById('btnTeacherSubSelections');
+  const btnMatrix = document.getElementById('btnTeacherSubMatrix');
+
+  const panelTopics = document.getElementById('teacherSubPanelTopics');
+  const panelSelections = document.getElementById('teacherSubPanelSelections');
+  const panelMatrix = document.getElementById('teacherSubPanelMatrix');
+
+  [btnTopics, btnSelections, btnMatrix].forEach(b => b?.classList.remove('active'));
+  [panelTopics, panelSelections, panelMatrix].forEach(p => {
+    if (p) p.style.display = 'none';
+  });
+
+  if (subTab === 'topics') {
+    btnTopics?.classList.add('active');
+    if (panelTopics) panelTopics.style.display = 'block';
+    renderTeacherTopicsTable();
+  } else if (subTab === 'selections') {
+    btnSelections?.classList.add('active');
+    if (panelSelections) panelSelections.style.display = 'block';
+    renderTeacherSelectionsTable();
+  } else if (subTab === 'matrix') {
+    btnMatrix?.classList.add('active');
+    if (panelMatrix) panelMatrix.style.display = 'block';
+    renderProjectMatrix();
+  }
+}
+
+async function loadTeacherProjectsTab() {
+  await fetchProjectTopics();
+  await fetchProjectSelections();
+  switchTeacherProjectSubTab(currentTeacherProjectSubTab);
+}
+
+function renderTeacherTopicsTable() {
+  const tbody = document.getElementById('teacherTopicsTableBody');
+  if (!tbody) return;
+
+  const searchQuery = (document.getElementById('teacherProjectSearchInput')?.value || '').trim().toLowerCase();
+
+  let filtered = allProjectTopics.filter(t => {
+    if (!searchQuery) return true;
+    return (t.title || '').toLowerCase().includes(searchQuery) ||
+           (t.category || '').toLowerCase().includes(searchQuery) ||
+           (t.selected_rooms || []).join(' ').toLowerCase().includes(searchQuery);
+  });
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="6" class="text-center py-4">ไม่พบข้อมูลหัวข้อโครงงาน</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = filtered.map(t => {
+    const selectedRooms = t.selected_rooms || [];
+    const roomsHtml = selectedRooms.length > 0
+      ? selectedRooms.map(r => `<span class="badge badge-success" style="font-size:0.75rem;">${escapeHtml(r)}</span>`).join(' ')
+      : '<span class="text-muted text-xs">ยังไม่มีห้องเลือก</span>';
+
+    const isClosed = t.status === 'closed';
+
+    return `
+      <tr>
+        <td style="font-weight: 700; color: var(--slate-500);">${t.id}</td>
+        <td><span class="topic-category-tag" style="font-size: 0.75rem;">${escapeHtml(t.category)}</span></td>
+        <td>
+          <strong>${escapeHtml(t.title)}</strong>
+          ${t.technologies ? `<div class="text-muted text-xs mt-1">🛠️ ${escapeHtml(t.technologies)}</div>` : ''}
+        </td>
+        <td>${roomsHtml}</td>
+        <td style="text-align: center;">
+          <span class="badge ${isClosed ? 'badge-danger' : 'badge-success'}">
+            ${isClosed ? 'ปิดรับ' : `เปิดรับ (${selectedRooms.length}/${t.max_groups_total || 8})`}
+          </span>
+        </td>
+        <td style="text-align: center;">
+          <div class="d-flex justify-center gap-1">
+            <button class="btn btn-sm btn-outline-primary" onclick="openTopicDetailsModal(${t.id})" title="ดูข้อมูลกลุ่ม">👥</button>
+            <button class="btn btn-sm btn-outline-secondary" onclick="openEditTopicModal(${t.id})" title="แก้ไข">✏️</button>
+            <button class="btn btn-sm btn-outline-danger" onclick="deleteTopic(${t.id})" title="ลบหัวข้อ">🗑️</button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function renderTeacherSelectionsTable() {
+  const tbody = document.getElementById('teacherSelectionsTableBody');
+  if (!tbody) return;
+
+  const searchQuery = (document.getElementById('teacherProjectSearchInput')?.value || '').trim().toLowerCase();
+
+  let filtered = allProjectSelections.filter(s => {
+    if (!searchQuery) return true;
+    return (s.classroom || '').toLowerCase().includes(searchQuery) ||
+           (s.group_name || '').toLowerCase().includes(searchQuery) ||
+           (s.topic_title || '').toLowerCase().includes(searchQuery) ||
+           (s.custom_title || '').toLowerCase().includes(searchQuery);
+  });
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7" class="text-center py-4">ยังไม่มีกลุ่มใดลงทะเบียน</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = filtered.map(s => {
+    const members = s.members || [];
+    const memberChips = members.map(m => `
+      <span class="badge badge-secondary" style="font-size:0.75rem; margin: 1px;">
+        ${m.student_number ? `(${m.student_number}) ` : ''}${escapeHtml(m.name)}
+      </span>
+    `).join(' ');
+
+    return `
+      <tr>
+        <td><span class="badge badge-success" style="font-weight: 700;">${escapeHtml(s.classroom)}</span></td>
+        <td style="text-align: center; font-weight: 700;">กลุ่ม ${s.group_number}</td>
+        <td>
+          <strong>${escapeHtml(s.group_name || 'ไม่มีชื่อกลุ่ม')}</strong>
+          ${s.custom_title ? `<div class="text-muted text-xs mt-1">📌 ${escapeHtml(s.custom_title)}</div>` : ''}
+        </td>
+        <td>
+          <span style="font-weight: 600; color: var(--school-green-dark);">${escapeHtml(s.topic_title || '-')}</span>
+          <div class="text-muted text-xs">${escapeHtml(s.topic_category || '')}</div>
+        </td>
+        <td>
+          <div>${memberChips}</div>
+          <span class="text-xs text-muted mt-1">รวม ${members.length} คน</span>
+        </td>
+        <td class="text-xs text-muted">${escapeHtml(s.advisor || '-')}</td>
+        <td style="text-align: center;">
+          <button class="btn btn-sm btn-outline-danger" onclick="deleteProjectSelection(${s.id})" title="ยกเลิกการเลือกลุ่มนี้">
+            ยกเลิก
+          </button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function filterTeacherProjects() {
+  if (currentTeacherProjectSubTab === 'topics') {
+    renderTeacherTopicsTable();
+  } else if (currentTeacherProjectSubTab === 'selections') {
+    renderTeacherSelectionsTable();
+  }
+}
+
+function openCreateTopicModal() {
+  const form = document.getElementById('teacherTopicForm');
+  if (form) form.reset();
+  const editId = document.getElementById('topicEditId');
+  if (editId) editId.value = '';
+  const title = document.getElementById('teacherTopicModalTitle');
+  if (title) title.textContent = 'เพิ่มหัวข้อโครงงานใหม่';
+  openModal('modalTeacherTopic');
+}
+
+function openEditTopicModal(topicId) {
+  const topic = allProjectTopics.find(t => t.id === topicId);
+  if (!topic) return;
+
+  const editId = document.getElementById('topicEditId');
+  if (editId) editId.value = topic.id;
+
+  const titleEl = document.getElementById('teacherTopicModalTitle');
+  if (titleEl) titleEl.textContent = 'แก้ไขหัวข้อโครงงาน';
+
+  document.getElementById('topicInputTitle').value = topic.title || '';
+  document.getElementById('topicInputCategory').value = topic.category || '';
+  document.getElementById('topicInputDesc').value = topic.description || '';
+  document.getElementById('topicInputObjectives').value = topic.objectives || '';
+  document.getElementById('topicInputTech').value = topic.technologies || '';
+  document.getElementById('topicInputQuotaRoom').value = topic.max_groups_per_room || 1;
+  document.getElementById('topicInputStatus').value = topic.status || 'open';
+
+  openModal('modalTeacherTopic');
+}
+
+async function handleSaveTeacherTopic(event) {
+  event.preventDefault();
+
+  const editId = document.getElementById('topicEditId')?.value;
+  const isEdit = Boolean(editId);
+
+  const payload = {
+    title: (document.getElementById('topicInputTitle')?.value || '').trim(),
+    category: (document.getElementById('topicInputCategory')?.value || '').trim(),
+    description: (document.getElementById('topicInputDesc')?.value || '').trim(),
+    objectives: (document.getElementById('topicInputObjectives')?.value || '').trim(),
+    technologies: (document.getElementById('topicInputTech')?.value || '').trim(),
+    max_groups_per_room: parseInt(document.getElementById('topicInputQuotaRoom')?.value || '1', 10),
+    status: document.getElementById('topicInputStatus')?.value || 'open'
+  };
+
+  const url = isEdit ? `/api/projects/topics/${editId}` : '/api/projects/topics';
+  const method = isEdit ? 'PUT' : 'POST';
+
+  try {
+    const res = await fetch(url, {
+      method: method,
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Teacher-Password': teacherPass || '',
+        'X-Teacher-Token': teacherToken || ''
+      },
+      body: JSON.stringify(payload)
+    });
+
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      throw new Error(data.error || 'เกิดข้อผิดพลาดในการบันทึกหัวข้อโครงงาน');
+    }
+
+    showToast(data.message || 'บันทึกข้อมูลเรียบร้อยแล้ว', 'success');
+    closeModal('modalTeacherTopic');
+    await loadTeacherProjectsTab();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+async function deleteTopic(topicId) {
+  const topic = allProjectTopics.find(t => t.id === topicId);
+  const name = topic ? topic.title : `#${topicId}`;
+
+  if (!confirm(`ยืนยันการลบหัวข้อโครงงาน "${name}"?\n(คำเตือน: ข้อมูลกลุ่มที่เลือกหัวข้อนี้จะถูกลบไปด้วย)`)) {
+    return;
+  }
+
+  try {
+    const res = await fetch(`/api/projects/topics/${topicId}`, {
+      method: 'DELETE',
+      headers: {
+        'X-Teacher-Password': teacherPass || '',
+        'X-Teacher-Token': teacherToken || ''
+      }
+    });
+
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      throw new Error(data.error || 'ไม่สามารถลบหัวข้อโครงงานได้');
+    }
+
+    showToast('ลบหัวข้อโครงงานเรียบร้อยแล้ว', 'success');
+    await loadTeacherProjectsTab();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+async function deleteProjectSelection(selId) {
+  if (!confirm('ยืนยันการยกเลิกการเลือกลงทะเบียนกลุ่มนี้? นักเรียนจะสามารถเลือกลงทะเบียนใหม่ได้')) {
+    return;
+  }
+
+  try {
+    const res = await fetch(`/api/projects/selections/${selId}`, {
+      method: 'DELETE',
+      headers: {
+        'X-Teacher-Password': teacherPass || '',
+        'X-Teacher-Token': teacherToken || ''
+      }
+    });
+
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      throw new Error(data.error || 'ไม่สามารถยกเลิกการลงทะเบียนได้');
+    }
+
+    showToast('ยกเลิกการเลือกลงทะเบียนกลุ่มเรียบร้อยแล้ว', 'success');
+    await loadTeacherProjectsTab();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+function exportProjectsCSV() {
+  window.location.href = '/api/export/projects';
+}
+
