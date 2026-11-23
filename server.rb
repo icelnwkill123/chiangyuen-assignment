@@ -557,6 +557,153 @@ if count == 0
   puts "Seeded 5 actual teacher assignments."
 end
 
+# Table: project_topics
+db.execute <<-SQL
+  CREATE TABLE IF NOT EXISTS project_topics (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    category TEXT NOT NULL,
+    description TEXT,
+    objectives TEXT,
+    technologies TEXT,
+    max_groups_per_room INTEGER DEFAULT 1,
+    max_groups_total INTEGER DEFAULT 8,
+    status TEXT DEFAULT 'open',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+SQL
+
+# Table: project_selections
+db.execute <<-SQL
+  CREATE TABLE IF NOT EXISTS project_selections (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    topic_id INTEGER NOT NULL,
+    classroom TEXT NOT NULL,
+    group_number INTEGER NOT NULL,
+    group_name TEXT,
+    custom_title TEXT,
+    members_json TEXT NOT NULL,
+    advisor TEXT,
+    note TEXT,
+    status TEXT DEFAULT 'confirmed',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(topic_id) REFERENCES project_topics(id) ON DELETE CASCADE,
+    UNIQUE(classroom, topic_id)
+  );
+SQL
+db.execute('CREATE INDEX IF NOT EXISTS idx_proj_sel_top ON project_selections(topic_id)')
+db.execute('CREATE INDEX IF NOT EXISTS idx_proj_sel_cls ON project_selections(classroom)')
+
+# Seed 12 project topics if empty
+topics_count = db.get_first_value('SELECT COUNT(*) FROM project_topics') rescue 0
+if topics_count == 0
+  seed_topics = [
+    [
+      'ระบบคัดแยกขยะอัจฉริยะด้วย AI และกล้องคอมพิวเตอร์',
+      'AI & Machine Learning',
+      'พัฒนาระบบตรวจจับและจำแนกประเภทขยะ (รีไซเคิล, ทั่วไป, อินทรีย์, อันตราย) ด้วยเทคโนโลยี Computer Vision เพื่อช่วยเพิ่มประสิทธิภาพการจัดการสิ่งแวดล้อมในโรงเรียน',
+      "1. เพื่อศึกษาการจำแนกภาพด้วย AI\n2. เพื่อสร้างระบบแยกขยะลดปัญหาสิ่งแวดล้อมในโรงเรียน",
+      'Python, OpenCV, TensorFlow/YOLO, Raspberry Pi / Web Camera',
+      1, 8, 'open'
+    ],
+    [
+      'ระบบสมาร์ทฟาร์มรดน้ำและควบคุมความชื้นโรงเรือนผ่าน IoT',
+      'IoT & Smart Agriculture',
+      'สร้างระบบเซนเซอร์วัดความชื้นในดิน อุณหภูมิ และแสง ควบคุมวาล์วน้ำอัตโนมัติพร้อมรายงานผลผ่านสมาร์ตโฟนหรือแดชบอร์ดออนไลน์',
+      "1. เพื่อประหยัดทรัพยากรน้ำ\n2. เพื่อเพิ่มผลผลิตทางการเกษตรของแปลงทดลองโรงเรียน",
+      'ESP32/NodeMCU, DHT22, Soil Moisture Sensor, Blynk / MQTT, Web Dashboard',
+      1, 8, 'open'
+    ],
+    [
+      'เว็บไซต์และแพลตฟอร์มประชาสัมพันธ์ของดีชุมชนอำเภอเชียงยืน',
+      'Web Application',
+      'พัฒนาเว็บแอปพลิเคชันรวบรวมสถานที่ท่องเที่ยว สินค้า OTOP อาหารพื้นถิ่น และเส้นทางท่องเที่ยวเชิงวัฒนธรรมในอำเภอเชียงยืน จังหวัดมหาสารคาม',
+      "1. เพื่อส่งเสริมเศรษฐกิจชุมชนเชียงยืน\n2. เพื่อสร้างแหล่งข้อมูลดิจิทัลที่เข้าถึงง่ายสำหรับนักท่องเที่ยว",
+      'HTML5, Tailwind CSS, JavaScript, SQLite / Firebase, Google Maps API',
+      1, 8, 'open'
+    ],
+    [
+      'แอปพลิเคชันบันทึกรายรับ-รายจ่ายและวางแผนการเงินสำหรับวัยรุ่น',
+      'Mobile Application',
+      'แอปบันทึกการใช้จ่ายรายวัน วิเคราะห์แนวโน้มการออมเงิน และมีฟีเจอร์ตั้งเป้าหมายการเงินรายสัปดาห์/รายเดือน พร้อมสรุปเป็นกราฟที่เข้าใจง่าย',
+      "1. เพื่อสร้างวินัยทางการเงินแก่นักเรียน\n2. เพื่อให้เห็นพฤติกรรมการใช้จ่ายและเงินออม",
+      'Flutter / React Native / PWA, Chart.js, LocalStorage / SQLite',
+      1, 8, 'open'
+    ],
+    [
+      'ระบบจองยืม-คืนอุปกรณ์ห้องปฏิบัติการคอมพิวเตอร์ออนไลน์',
+      'Web Application',
+      'ระบบจัดการยืม-คืนอุปกรณ์เสริม อะแดปเตอร์ สายแปลง และโน้ตบุ๊ก พร้อมแจ้งเตือนกำหนดส่งคืนผ่านไลน์ และตรวจสอบสถานะอุปกรณ์ว่างแบบเรียลไทม์',
+      "1. เพื่อลดการสูญหายของอุปกรณ์คอมพิวเตอร์\n2. เพื่อความสะดวกรวดเร็วในการตรวจสอบประวัติการยืม-คืน",
+      'HTML/CSS/JS, Node.js / Python, SQLite, Line Notify API',
+      1, 8, 'open'
+    ],
+    [
+      'เกมตอบคำถาม 2D เสริมสร้างทักษะวิทยาการคำนวณและตรรกะ',
+      'Game Development',
+      'พัฒนาเกมตะลุยด่าน 2 มิติที่สอดแทรกแนวคิด Computational Thinking, การคิดเชิงคำนวณ และอัลกอริทึม สำหรับนักเรียนชั้นมัธยมศึกษา',
+      "1. เพื่อให้นักเรียนเรียนรู้วิทยาการคำนวณอย่างเพลิดเพลิน\n2. เพื่อพัฒนาทักษะการแก้ปัญหาเชิงตรรกะ",
+      'Construct 3 / Phaser.js / Godot, Pixel Art, WebGL',
+      1, 8, 'open'
+    ],
+    [
+      'ระบบแจ้งเตือนฝุ่น PM2.5 และสภาพอากาศรอบโรงเรียนเชียงยืนพิทยาคม',
+      'IoT & Environment',
+      'ติดตั้งสถานีตรวจวัดฝุ่นละออง PM2.5, PM10 และดัชนีคุณภาพอากาศ (AQI) บริเวณโรงเรียน พร้อมแสดงผลบนจอ LED และแจ้งเตือนเมื่อเกินเกณฑ์มาตรฐาน',
+      "1. เพื่อความปลอดภัยด้านสุขภาพของนักเรียนและครู\n2. เพื่อรวบรวมข้อมูลสถิติมลพิษทางอากาศในท้องถิ่น",
+      'ESP8266/ESP32, PMS5003 Dust Sensor, LCD Display, Line Notify, Chart.js',
+      1, 8, 'open'
+    ],
+    [
+      'แดชบอร์ดวิเคราะห์สถิติสุขภาพและดัชนีมวลกาย (BMI) ของนักเรียน',
+      'Data Analytics',
+      'ระบบบันทึกและประมวลผลข้อมูลสุขภาพ น้ำหนัก ส่วนสูง สมรรถภาพทางกาย แสดงผลแดชบอร์ดเปรียบเทียบค่าเฉลี่ยตามระดับชั้นและห้องเรียน พร้อมให้คำแนะนำด้านโภชนาการ',
+      "1. เพื่อส่งเสริมสุขภาวะที่ดีของนักเรียนในโรงเรียน\n2. เพื่อประยุกต์ใช้วิทยาการข้อมูล (Data Science) ในสถานศึกษา",
+      'Python, Pandas, Chart.js, SQLite, HTML5 Responsive Dashboard',
+      1, 8, 'open'
+    ],
+    [
+      'ระบบตรวจสอบการเข้าเรียนและการเข้าร่วมกิจกรรมด้วย QR Code',
+      'Web & Mobile',
+      'ระบบเช็คชื่อนักเรียนเข้าแถวตอนเช้าและกิจกรรมหน้าเสาธงผ่านบัตรนักเรียน QR Code แสดงสถิติการมาเรียน มาสาย ลา ขาด ทันที',
+      "1. เพื่อความสะดวกรวดเร็วในการเช็คชื่อและลดการใช้กระดาษ\n2. เพื่อแจ้งเตือนข้อมูลการเข้าเรียนแก่ครูที่ปรึกษา",
+      'HTML5 Camera Scanner, JavaScript (html5-qrcode), SQLite, Excel Export',
+      1, 8, 'open'
+    ],
+    [
+      'แอปพลิเคชันคลังคำศัพท์ภาษาอังกฤษสำหรับเตรียมสอบเข้ามหาวิทยาลัย (TGAT/A-Level)',
+      'Mobile Application',
+      'แอปพลิเคชัน Flashcard ช่วยจำคำศัพท์ภาษาอังกฤษ แบ่งตามระดับความยาก มีระบบ Space Repetition ทบทวนคำศัพท์ที่มักจำผิด และระบบทดสอบจำลอง',
+      "1. เพื่อยกระดับคะแนนภาษาอังกฤษของนักเรียน ม.ปลาย\n2. เพื่อสนับสนุนการเรียนรู้ด้วยตนเองทุกที่ทุกเวลา",
+      'Vue.js / React, Tailwind CSS, Web Storage, SpeechSynthesis API',
+      1, 8, 'open'
+    ],
+    [
+      'เว็บไซต์จำลองตลาดนัดโรงเรียนและการสั่งอาหารล่วงหน้า (School Canteen)',
+      'Web Application',
+      'ระบบสั่งจองอาหารกลางวันและเครื่องดื่มในโรงอาหารโรงเรียนล่วงหน้า เพื่อลดความแออัดในช่วงเวลาพักเที่ยง และบริหารสต็อกอาหารอย่างคุ้มค่า',
+      "1. เพื่อลดเวลาการรอคิวอาหารของนักเรียน\n2. เพื่อช่วยร้านค้าบริหารจัดการปริมาณวัตถุดิบได้แม่นยำ",
+      'HTML/CSS/JS, SQLite, Responsive Web Design, Order Management System',
+      1, 8, 'open'
+    ],
+    [
+      'แชทบอท AI แนะนำข้อมูลแผนการเรียนและกิจกรรมโรงเรียนเชียงยืนพิทยาคม',
+      'AI & Natural Language',
+      'ระบบตอบคำถามอัตโนมัติเกี่ยวกับหลักสูตรการเรียน แผนการเรียน ม.ปลาย กิจกรรมชมรม และปฏิทินการศึกษา ผ่านระบบโต้ตอบอัจฉริยะ',
+      "1. เพื่อให้บริการข้อมูลแก่นักเรียนและผู้ปกครองตลอด 24 ชม.\n2. เพื่อลดภาระงานประชาสัมพันธ์และแนะแนวของโรงเรียน",
+      'JavaScript / Python, NLP / Rule-based matching, Modern Chat UI',
+      1, 8, 'open'
+    ]
+  ]
+  seed_topics.each do |t|
+    db.execute(
+      'INSERT INTO project_topics (title, category, description, objectives, technologies, max_groups_per_room, max_groups_total, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      t
+    )
+  end
+  puts "Seeded #{seed_topics.size} project topics successfully."
+end
+
 # Helper to send JSON responses
 def send_json(res, data, status = 200)
   res.status = status
@@ -897,18 +1044,22 @@ server.mount_proc '/api' do |req, res|
     # 1. Statistics: GET /api/stats
     # -----------------------------
     when '/api/stats'
-      total_assignments = db.get_first_value('SELECT COUNT(*) FROM assignments')
-      total_submissions = db.get_first_value('SELECT COUNT(*) FROM submissions')
-      pending_submissions = db.get_first_value("SELECT COUNT(*) FROM submissions WHERE status = 'pending'")
-      graded_submissions = db.get_first_value("SELECT COUNT(*) FROM submissions WHERE status = 'graded'")
-      total_students = db.get_first_value('SELECT COUNT(*) FROM students')
+      total_assignments = db.get_first_value('SELECT COUNT(*) FROM assignments') rescue 0
+      total_submissions = db.get_first_value('SELECT COUNT(*) FROM submissions') rescue 0
+      pending_submissions = db.get_first_value("SELECT COUNT(*) FROM submissions WHERE status = 'pending'") rescue 0
+      graded_submissions = db.get_first_value("SELECT COUNT(*) FROM submissions WHERE status = 'graded'") rescue 0
+      total_students = db.get_first_value('SELECT COUNT(*) FROM students') rescue 0
+      total_topics = db.get_first_value('SELECT COUNT(*) FROM project_topics') rescue 0
+      total_selections = db.get_first_value('SELECT COUNT(*) FROM project_selections') rescue 0
       
       send_json(res, {
         assignments_count: total_assignments,
         submissions_count: total_submissions,
         pending_count: pending_submissions,
         graded_count: graded_submissions,
-        students_count: total_students
+        students_count: total_students,
+        topics_count: total_topics,
+        project_selections_count: total_selections
       })
 
     # -----------------------------
@@ -1720,6 +1871,405 @@ server.mount_proc '/api' do |req, res|
       db.execute('DELETE FROM submissions WHERE id = ?', [id])
       sync_db_to_github
       send_json(res, { success: true, message: 'ลบการส่งงานเรียบร้อยแล้ว นักเรียนสามารถส่งใหม่ได้ทันที' })
+
+    # -----------------------------
+    # 15. Project Topics: GET / POST /api/projects/topics
+    # -----------------------------
+    when '/api/projects/topics'
+      if method == 'GET'
+        topics = db.execute('SELECT * FROM project_topics ORDER BY id ASC')
+        all_rooms = ['ม.5/1', 'ม.5/2', 'ม.5/3', 'ม.5/4', 'ม.5/5', 'ม.5/6', 'ม.5/7', 'ม.5/8']
+
+        enriched_topics = topics.map do |t|
+          selections = db.execute(
+            'SELECT id, classroom, group_number, group_name, custom_title, members_json, advisor, note, status, created_at FROM project_selections WHERE topic_id = ? ORDER BY classroom ASC, group_number ASC',
+            [t['id']]
+          )
+          parsed_selections = selections.map do |sel|
+            members = begin
+              JSON.parse(sel['members_json'])
+            rescue
+              []
+            end
+            {
+              'id' => sel['id'],
+              'classroom' => sel['classroom'],
+              'group_number' => sel['group_number'],
+              'group_name' => sel['group_name'],
+              'custom_title' => sel['custom_title'],
+              'members' => members,
+              'advisor' => sel['advisor'],
+              'note' => sel['note'],
+              'status' => sel['status'],
+              'created_at' => sel['created_at']
+            }
+          end
+          selected_rooms = parsed_selections.map { |s| s['classroom'] }.uniq
+          available_rooms = all_rooms - selected_rooms
+          max_groups = t['max_groups_total'] || 8
+
+          {
+            'id' => t['id'],
+            'title' => t['title'],
+            'category' => t['category'],
+            'description' => t['description'],
+            'objectives' => t['objectives'],
+            'technologies' => t['technologies'],
+            'max_groups_per_room' => t['max_groups_per_room'] || 1,
+            'max_groups_total' => max_groups,
+            'status' => t['status'] || 'open',
+            'created_at' => t['created_at'],
+            'selected_rooms' => selected_rooms,
+            'available_rooms' => available_rooms,
+            'selections_count' => parsed_selections.size,
+            'is_full' => (parsed_selections.size >= max_groups),
+            'selections' => parsed_selections
+          }
+        end
+        send_json(res, { success: true, topics: enriched_topics })
+
+      elsif method == 'POST'
+        unless check_teacher_auth(req)
+          send_error(res, 'กรุณาเข้าสู่ระบบด้วยรหัสผ่านอาจารย์ก่อนเพิ่มหัวข้อโครงงาน', 401)
+          next
+        end
+
+        body = parse_json_body(req)
+        title = clean_str(body['title'])
+        category = clean_str(body['category'])
+        description = clean_str(body['description'])
+        objectives = clean_str(body['objectives'])
+        technologies = clean_str(body['technologies'])
+        max_per_room = body['max_groups_per_room'].to_i
+        max_per_room = 1 if max_per_room <= 0
+        max_total = body['max_groups_total'].to_i
+        max_total = 8 if max_total <= 0
+        status = clean_str(body['status']).empty? ? 'open' : clean_str(body['status'])
+
+        if title.empty? || category.empty?
+          send_error(res, 'กรุณาระบุชื่อหัวข้อและหมวดหมู่โครงงาน', 400)
+          next
+        end
+
+        db.execute(
+          'INSERT INTO project_topics (title, category, description, objectives, technologies, max_groups_per_room, max_groups_total, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+          [title, category, description, objectives, technologies, max_per_room, max_total, status]
+        )
+        new_id = db.last_insert_row_id
+        sync_db_to_github
+        send_json(res, { success: true, message: 'เพิ่มหัวข้อโครงงานสำเร็จ', topic_id: new_id })
+      end
+
+    # -----------------------------
+    # 16. Project Topic Details / Edit / Delete: /api/projects/topics/:id
+    # -----------------------------
+    when %r{\A/api/projects/topics/(\d+)(?:/delete)?\z}
+      id = Regexp.last_match(1).to_i
+      topic = db.get_first_row('SELECT * FROM project_topics WHERE id = ?', [id])
+      unless topic
+        send_error(res, 'ไม่พบหัวข้อโครงงานที่ระบุ', 404)
+        next
+      end
+
+      if method == 'DELETE' || path.end_with?('/delete')
+        unless check_teacher_auth(req)
+          send_error(res, 'กรุณาเข้าสู่ระบบด้วยรหัสผ่านอาจารย์ก่อนลบหัวข้อ', 401)
+          next
+        end
+        db.execute('DELETE FROM project_selections WHERE topic_id = ?', [id])
+        db.execute('DELETE FROM project_topics WHERE id = ?', [id])
+        sync_db_to_github
+        send_json(res, { success: true, message: 'ลบหัวข้อโครงงานและข้อมูลกลุ่มที่เกี่ยวข้องเรียบร้อยแล้ว' })
+
+      elsif method == 'PUT' || method == 'POST'
+        unless check_teacher_auth(req)
+          send_error(res, 'กรุณาเข้าสู่ระบบด้วยรหัสผ่านอาจารย์ก่อนแก้ไขหัวข้อ', 401)
+          next
+        end
+        body = parse_json_body(req)
+        title = clean_str(body['title'])
+        category = clean_str(body['category'])
+        description = clean_str(body['description'])
+        objectives = clean_str(body['objectives'])
+        technologies = clean_str(body['technologies'])
+        max_per_room = body['max_groups_per_room'].to_i
+        max_per_room = topic['max_groups_per_room'] if max_per_room <= 0
+        max_total = body['max_groups_total'].to_i
+        max_total = topic['max_groups_total'] if max_total <= 0
+        status = clean_str(body['status']).empty? ? topic['status'] : clean_str(body['status'])
+
+        db.execute(
+          'UPDATE project_topics SET title = ?, category = ?, description = ?, objectives = ?, technologies = ?, max_groups_per_room = ?, max_groups_total = ?, status = ? WHERE id = ?',
+          [
+            title.empty? ? topic['title'] : title,
+            category.empty? ? topic['category'] : category,
+            description,
+            objectives,
+            technologies,
+            max_per_room,
+            max_total,
+            status,
+            id
+          ]
+        )
+        sync_db_to_github
+        send_json(res, { success: true, message: 'บันทึกการแก้ไขหัวข้อโครงงานสำเร็จ' })
+
+      elsif method == 'GET'
+        selections = db.execute('SELECT * FROM project_selections WHERE topic_id = ? ORDER BY classroom ASC, group_number ASC', [id])
+        parsed_selections = selections.map do |sel|
+          sel['members'] = JSON.parse(sel['members_json']) rescue []
+          sel
+        end
+        send_json(res, { success: true, topic: topic, selections: parsed_selections })
+      end
+
+    # -----------------------------
+    # 17. Project Selections: GET /api/projects/selections
+    # -----------------------------
+    when '/api/projects/selections'
+      if method == 'GET'
+        classroom = clean_str(req.query['classroom'])
+        topic_id = req.query['topic_id'].to_i
+
+        conditions = []
+        params = []
+        if !classroom.empty?
+          conditions << 'ps.classroom = ?'
+          params << classroom
+        end
+        if topic_id > 0
+          conditions << 'ps.topic_id = ?'
+          params << topic_id
+        end
+
+        where_clause = conditions.empty? ? '' : "WHERE #{conditions.join(' AND ')}"
+        sql = <<-SQL
+          SELECT 
+            ps.id, ps.topic_id, ps.classroom, ps.group_number, ps.group_name, 
+            ps.custom_title, ps.members_json, ps.advisor, ps.note, ps.status, ps.created_at,
+            pt.title AS topic_title, pt.category AS topic_category
+          FROM project_selections ps
+          JOIN project_topics pt ON pt.id = ps.topic_id
+          #{where_clause}
+          ORDER BY ps.classroom ASC, ps.group_number ASC, ps.created_at DESC
+        SQL
+
+        rows = db.execute(sql, params)
+        selections = rows.map do |r|
+          members = begin
+            JSON.parse(r['members_json'])
+          rescue
+            []
+          end
+          {
+            'id' => r['id'],
+            'topic_id' => r['topic_id'],
+            'topic_title' => r['topic_title'],
+            'topic_category' => r['topic_category'],
+            'classroom' => r['classroom'],
+            'group_number' => r['group_number'],
+            'group_name' => r['group_name'],
+            'custom_title' => r['custom_title'],
+            'members' => members,
+            'advisor' => r['advisor'],
+            'note' => r['note'],
+            'status' => r['status'],
+            'created_at' => r['created_at']
+          }
+        end
+        send_json(res, { success: true, selections: selections })
+      end
+
+    # -----------------------------
+    # 18. Student Project Selection: POST /api/projects/select
+    # -----------------------------
+    when '/api/projects/select'
+      if method == 'POST'
+        body = parse_json_body(req)
+        topic_id = body['topic_id'].to_i
+        classroom = clean_str(body['classroom'])
+        group_number = body['group_number'].to_i
+        group_name = clean_str(body['group_name'])
+        custom_title = clean_str(body['custom_title'])
+        advisor = clean_str(body['advisor'])
+        note = clean_str(body['note'])
+        members_data = body['members']
+
+        if topic_id <= 0
+          send_error(res, 'กรุณาเลือกหัวข้อโครงงาน', 400)
+          next
+        end
+
+        topic = db.get_first_row('SELECT * FROM project_topics WHERE id = ?', [topic_id])
+        unless topic
+          send_error(res, 'ไม่พบหัวข้อโครงงานที่เลือกในระบบ', 404)
+          next
+        end
+
+        if topic['status'] == 'closed'
+          send_error(res, 'ขออภัย หัวข้อโครงงานนี้ปิดรับการเลือกลงทะเบียนแล้ว', 400)
+          next
+        end
+
+        valid_classrooms = ['ม.5/1', 'ม.5/2', 'ม.5/3', 'ม.5/4', 'ม.5/5', 'ม.5/6', 'ม.5/7', 'ม.5/8']
+        unless valid_classrooms.include?(classroom)
+          send_error(res, "ห้องเรียนไม่ถูกต้อง (ต้องเป็น ม.5/1 ถึง ม.5/8)", 400)
+          next
+        end
+
+        if group_number <= 0
+          send_error(res, 'กรุณาระบุหมายเลขกลุ่ม (เช่น กลุ่มที่ 1)', 400)
+          next
+        end
+
+        # Check if this classroom already selected this topic
+        existing_sel = db.get_first_row(
+          'SELECT id, group_number, group_name FROM project_selections WHERE topic_id = ? AND classroom = ?',
+          [topic_id, classroom]
+        )
+        if existing_sel
+          g_info = existing_sel['group_name'].to_s.empty? ? "กลุ่มที่ #{existing_sel['group_number']}" : "กลุ่มที่ #{existing_sel['group_number']} (#{existing_sel['group_name']})"
+          send_error(res, "ห้อง #{classroom} ได้เลือกหัวข้อนี้ไปแล้วโดย #{g_info} (ไม่สามารถเลือกหัวข้อซ้ำในห้องเดียวกันได้ กรุณาเลือกหัวข้ออื่น)", 400)
+          next
+        end
+
+        # Check total groups cap
+        total_groups_now = db.get_first_value('SELECT COUNT(*) FROM project_selections WHERE topic_id = ?', [topic_id]) rescue 0
+        max_total = topic['max_groups_total'] || 8
+        if total_groups_now >= max_total
+          send_error(res, "หัวข้อนี้มีผู้ลงทะเบียนครบเต็มโควตาแล้ว (#{max_total} กลุ่ม) กรุณาเลือกหัวข้ออื่น", 400)
+          next
+        end
+
+        # Validate members
+        members_list = []
+        if members_data.is_a?(Array)
+          members_list = members_data
+        elsif members_data.is_a?(String)
+          members_list = JSON.parse(members_data) rescue []
+        end
+
+        if members_list.empty?
+          send_error(res, 'กรุณาระบุรายชื่อสมาชิกกลุ่มอย่างน้อย 1 คน', 400)
+          next
+        end
+
+        # Sanitize members
+        sanitized_members = members_list.map do |m|
+          {
+            'student_id' => clean_str(m['student_id']),
+            'student_number' => m['student_number'].to_i,
+            'name' => clean_str(m['name'])
+          }
+        end.reject { |m| m['name'].empty? }
+
+        if sanitized_members.empty?
+          send_error(res, 'รายชื่อสมาชิกไม่ถูกต้อง กรุณาระบุชื่อ-นามสกุล', 400)
+          next
+        end
+
+        members_json = JSON.generate(sanitized_members)
+
+        db.execute(
+          'INSERT INTO project_selections (topic_id, classroom, group_number, group_name, custom_title, members_json, advisor, note, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          [topic_id, classroom, group_number, group_name, custom_title, members_json, advisor, note, 'confirmed']
+        )
+        new_sel_id = db.last_insert_row_id
+        sync_db_to_github
+
+        send_json(res, {
+          success: true,
+          message: "บันทึกการเลือกหัวข้อโครงงานสำเร็จ! ห้อง #{classroom} กลุ่มที่ #{group_number}",
+          selection_id: new_sel_id,
+          topic_title: topic['title']
+        })
+      end
+
+    # -----------------------------
+    # 19. Delete Project Selection: DELETE /api/projects/selections/:id
+    # -----------------------------
+    when %r{\A/api/projects/selections/(\d+)(?:/delete)?\z}
+      unless check_teacher_auth(req)
+        send_error(res, 'กรุณาเข้าสู่ระบบด้วยรหัสผ่านอาจารย์ก่อนยกเลิกการเลือกโครงงาน', 401)
+        next
+      end
+
+      id = Regexp.last_match(1).to_i
+      sel = db.get_first_row('SELECT * FROM project_selections WHERE id = ?', [id])
+      unless sel
+        send_error(res, 'ไม่พบข้อมูลการลงทะเบียนโครงงานนี้', 404)
+        next
+      end
+
+      db.execute('DELETE FROM project_selections WHERE id = ?', [id])
+      sync_db_to_github
+      send_json(res, { success: true, message: "ยกเลิกการเลือกหัวข้อของห้อง #{sel['classroom']} กลุ่มที่ #{sel['group_number']} เรียบร้อยแล้ว" })
+
+    # -----------------------------
+    # 20. Export Project Selections CSV: GET /api/export/projects
+    # -----------------------------
+    when '/api/export/projects', '/api/projects/export'
+      sql = <<-SQL
+        SELECT 
+          ps.id, ps.classroom, ps.group_number, ps.group_name, ps.custom_title,
+          ps.members_json, ps.advisor, ps.note, ps.status, ps.created_at,
+          pt.title AS topic_title, pt.category AS topic_category
+        FROM project_selections ps
+        JOIN project_topics pt ON pt.id = ps.topic_id
+        ORDER BY ps.classroom ASC, ps.group_number ASC, pt.title ASC
+      SQL
+
+      rows = db.execute(sql)
+
+      csv_data = String.new("\xEF\xBB\xBF") # UTF-8 BOM for Microsoft Excel
+      csv_data << "รายงานสรุปการเลือกหัวข้อโครงงานคอมพิวเตอร์ ระดับชั้น ม.5 (ห้อง 1 - 8)\n"
+      csv_data << "โรงเรียนเชียงยืนพิทยาคม • พิมพ์รายงานเมื่อ: #{Time.now.strftime('%Y-%m-%d %H:%M:%S')}\n"
+      csv_data << "จำนวนกลุ่มที่ลงทะเบียนทั้งหมด: #{rows.size} กลุ่ม\n\n"
+      csv_data << "ลำดับ,ห้อง,กลุ่มที่,ชื่อกลุ่ม,หัวข้อโครงงานหลัก,หมวดหมู่,ชื่อโครงงานที่กลุ่มเสนอ/ต่อยอด,จำนวนสมาชิก,รายชื่อสมาชิกในกลุ่ม,ครูที่ปรึกษา,สถานะ,หมายเหตุ,วันเวลาที่ลงทะเบียน\n"
+
+      rows.each_with_index do |r, idx|
+        members = begin
+          JSON.parse(r['members_json'])
+        rescue
+          []
+        end
+        member_str = members.map do |m|
+          no = m['student_number'].to_i > 0 ? "เลขที่ #{m['student_number']}" : ""
+          sid = m['student_id'].to_s.empty? ? "" : "รหัส #{m['student_id']}"
+          extra = [no, sid].reject(&:empty?).join(', ')
+          extra_str = extra.empty? ? "" : " (#{extra})"
+          "#{m['name']}#{extra_str}"
+        end.join(' | ')
+
+        csv_fields = [
+          idx + 1,
+          r['classroom'],
+          "กลุ่มที่ #{r['group_number']}",
+          r['group_name'] || '-',
+          r['topic_title'],
+          r['topic_category'],
+          r['custom_title'].to_s.empty? ? r['topic_title'] : r['custom_title'],
+          members.size,
+          member_str,
+          r['advisor'] || '-',
+          r['status'] == 'confirmed' ? 'ยืนยันแล้ว' : r['status'],
+          r['note'] || '-',
+          r['created_at']
+        ]
+
+        escaped = csv_fields.map do |f|
+          str = f.to_s.gsub('"', '""')
+          "\"#{str}\""
+        end
+        csv_data << "#{escaped.join(',')}\n"
+      end
+
+      res.status = 200
+      res['Content-Type'] = 'text/csv; charset=utf-8'
+      res['Access-Control-Allow-Origin'] = '*'
+      res['Content-Disposition'] = "attachment; filename=\"chiangyuen_m5_project_selections_#{Time.now.strftime('%Y%m%d_%H%M')}.csv\""
+      res.body = csv_data
 
     else
       send_error(res, "Endpoint not found: #{path}", 404)
