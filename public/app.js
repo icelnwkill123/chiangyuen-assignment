@@ -2166,10 +2166,16 @@ async function fetchProjectTopics() {
     const totalTopics = allProjectTopics.length;
     let totalGroups = 0;
     let totalStudentsInGroups = 0;
+    let availableCount = 0;
     const activeRoomsSet = new Set();
 
     allProjectTopics.forEach(t => {
-      totalGroups += (t.selections_count || 0);
+      const isTaken = t.is_taken || (t.selections_count || 0) > 0;
+      if (isTaken) {
+        totalGroups++;
+      } else {
+        availableCount++;
+      }
       if (t.selections) {
         t.selections.forEach(s => {
           activeRoomsSet.add(s.classroom);
@@ -2183,6 +2189,9 @@ async function fetchProjectTopics() {
     // Update UI Stats Badges
     const statTotalTopicsEl = document.getElementById('statTotalTopics');
     if (statTotalTopicsEl) statTotalTopicsEl.textContent = totalTopics;
+
+    const statAvailableTopicsEl = document.getElementById('statAvailableTopics');
+    if (statAvailableTopicsEl) statAvailableTopicsEl.textContent = availableCount;
 
     const statSelectedGroupsEl = document.getElementById('statSelectedGroups');
     if (statSelectedGroupsEl) statSelectedGroupsEl.textContent = totalGroups;
@@ -2250,6 +2259,16 @@ function filterProjectTopics() {
   renderProjectTopics();
 }
 
+function getTopicCategoryClass(cat) {
+  if (!cat) return 'cat-default';
+  if (cat.includes('หมวดที่ 1')) return 'cat-mech';
+  if (cat.includes('หมวดที่ 2')) return 'cat-materials';
+  if (cat.includes('หมวดที่ 3')) return 'cat-energy';
+  if (cat.includes('หมวดที่ 4')) return 'cat-ergo';
+  if (cat.includes('หมวดที่ 5')) return 'cat-digital';
+  return 'cat-default';
+}
+
 function renderProjectTopics() {
   const container = document.getElementById('projectTopicsGrid');
   if (!container) return;
@@ -2265,20 +2284,27 @@ function renderProjectTopics() {
       const matchCat = (t.category || '').toLowerCase().includes(searchQuery);
       const matchTech = (t.technologies || '').toLowerCase().includes(searchQuery);
       const matchDesc = (t.description || '').toLowerCase().includes(searchQuery);
-      if (!matchTitle && !matchCat && !matchTech && !matchDesc) return false;
+      const matchTaken = (t.taken_by || '').toLowerCase().includes(searchQuery);
+      if (!matchTitle && !matchCat && !matchTech && !matchDesc && !matchTaken) return false;
     }
 
     // Category filter
     if (categoryFilter && t.category !== categoryFilter) return false;
 
-    // Room Filter: If specific room selected
+    // Room / Availability Filter
+    const isTaken = t.is_taken || (t.selections_count || 0) > 0;
     if (projectSelectedRoomFilter) {
-      const roomSelectedIt = (t.selected_rooms || []).includes(projectSelectedRoomFilter);
-      if (availabilityFilter === 'available' && roomSelectedIt) return false;
-      if (availabilityFilter === 'selected' && !roomSelectedIt) return false;
+      const isTakenByThisRoom = (t.taken_classroom === projectSelectedRoomFilter);
+      if (availabilityFilter === 'all') {
+        if (!isTakenByThisRoom) return false;
+      } else if (availabilityFilter === 'available') {
+        if (isTaken) return false;
+      } else if (availabilityFilter === 'selected') {
+        if (!isTakenByThisRoom) return false;
+      }
     } else {
-      if (availabilityFilter === 'available' && t.is_full) return false;
-      if (availabilityFilter === 'selected' && (t.selections_count || 0) === 0) return false;
+      if (availabilityFilter === 'available' && isTaken) return false;
+      if (availabilityFilter === 'selected' && !isTaken) return false;
     }
 
     return true;
@@ -2298,47 +2324,80 @@ function renderProjectTopics() {
     return;
   }
 
-  const allM5Rooms = ['ม.5/1', 'ม.5/2', 'ม.5/3', 'ม.5/4', 'ม.5/5', 'ม.5/6', 'ม.5/7', 'ม.5/8'];
-
   container.innerHTML = filtered.map(t => {
-    const selectedRooms = t.selected_rooms || [];
-    const availableRooms = allM5Rooms.filter(r => !selectedRooms.includes(r));
-    const isFull = t.is_full || selectedRooms.length >= (t.max_groups_total || 8);
-    const isOpen = (t.status || 'open') === 'open' && !isFull;
+    const isTaken = t.is_taken || (t.selections_count || 0) > 0;
+    const catClass = getTopicCategoryClass(t.category);
 
-    // Build Badges for Rooms that ALREADY picked this topic ("หัวข้อนี้ ม.5 ห้องไหนเลือกไปแล้ว")
-    let selectedRoomsHtml = '';
-    if (selectedRooms.length === 0) {
-      selectedRoomsHtml = `<span class="room-pill-available">✨ ยังไม่มีห้องใดเลือก (ว่างสำหรับทุกห้อง ม.5/1 - 8)</span>`;
+    let statusHtml = '';
+    let actionButtonsHtml = '';
+    let roomGroupInfoHtml = '';
+
+    if (isTaken) {
+      const gName = t.taken_group_name ? ` (${escapeHtml(t.taken_group_name)})` : '';
+      const memCount = t.taken_members ? t.taken_members.length : 0;
+      const memNames = (t.taken_members || []).map(m => {
+        const numStr = m.student_number ? `เลขที่ ${m.student_number} ` : '';
+        return `${numStr}${escapeHtml(m.name)}`;
+      }).join(' • ');
+
+      statusHtml = `
+        <span class="topic-status-badge closed">
+          🔴 เลือกแล้ว: ห้อง ${escapeHtml(t.taken_classroom || '')} กลุ่ม ${t.taken_group || ''}
+        </span>
+      `;
+
+      roomGroupInfoHtml = `
+        <div class="topic-taken-banner">
+          <div class="taken-header d-flex justify-between align-center">
+            <span class="taken-room-badge">👥 ห้อง ${escapeHtml(t.taken_classroom || '')} • กลุ่มที่ ${t.taken_group || ''}${gName}</span>
+            <span class="taken-mem-count">สมาชิก ${memCount} คน</span>
+          </div>
+          <div class="taken-members-list mt-1">
+            <strong>รายชื่อสมาชิก:</strong> ${memNames || '-'}
+          </div>
+          <div class="taken-rule-notice mt-1">
+            🔒 หัวข้อนี้ถูกเลือกแล้ว • ห้องอื่นไม่สามารถเลือกซ้ำได้
+          </div>
+        </div>
+      `;
+
+      actionButtonsHtml = `
+        <button type="button" class="btn-select-topic btn-taken-disabled" disabled title="หัวข้อนี้ถูกเลือกแล้ว ไม่สามารถเลือกซ้ำได้">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+          <span>🔒 ถูกเลือกแล้ว (ห้ามซ้ำ)</span>
+        </button>
+        <button type="button" class="btn-topic-details" onclick="openTopicDetailsModal(${t.id})" title="ดูรายละเอียดกลุ่มและสมาชิกทั้งหมด">
+          <span>👥 ดูข้อมูลกลุ่ม</span>
+        </button>
+      `;
     } else {
-      selectedRoomsHtml = (t.selections || []).map(sel => {
-        const memCount = sel.members ? sel.members.length : 0;
-        const gName = sel.group_name ? `: ${escapeHtml(sel.group_name)}` : '';
-        return `
-          <button type="button" class="room-pill-selected" onclick="openTopicDetailsModal(${t.id})" title="คลิกดูรายชื่อสมาชิกกลุ่ม ${sel.classroom}">
-            <span class="pill-dot"></span>
-            <span>${escapeHtml(sel.classroom)} (กลุ่ม ${sel.group_number}${gName})</span>
-            <span style="opacity:0.85; font-size:0.75rem;">👥 ${memCount} คน</span>
-          </button>
-        `;
-      }).join('');
+      statusHtml = `
+        <span class="topic-status-badge open">
+          🟢 ว่าง (พร้อมให้เลือกลงทะเบียน)
+        </span>
+      `;
+
+      roomGroupInfoHtml = `
+        <div class="topic-available-banner">
+          <span class="avail-icon">✨</span>
+          <span>ยังไม่มีห้องใดเลือก — พร้อมลงทะเบียนสำหรับ ม.5 ทุกห้อง (1 หัวข้อต่อ 1 กลุ่ม ห้ามซ้ำ)</span>
+        </div>
+      `;
+
+      actionButtonsHtml = `
+        <button type="button" class="btn-select-topic" onclick="openProjectSelectModal(${t.id})">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>
+          <span>📌 ลงทะเบียนเลือกหัวข้อนี้</span>
+        </button>
+      `;
     }
 
-    // Build Available Rooms pills
-    let availableRoomsHtml = '';
-    if (availableRooms.length === 0) {
-      availableRoomsHtml = `<span class="room-pill-all-taken">⚠️ มีผู้เลือกครบทุกห้องแล้ว (เต็ม)</span>`;
-    } else {
-      availableRoomsHtml = availableRooms.map(r => `<span class="room-pill-available">${escapeHtml(r)}</span>`).join('');
-    }
-
-    // Recommended Tech Chips
     let techChipsHtml = '';
     if (t.technologies) {
       const techList = t.technologies.split(/,|、|\n/).map(s => s.trim()).filter(s => s.length > 0);
       techChipsHtml = `
         <div class="topic-tech-box">
-          <div class="topic-tech-label">เทคโนโลยี / เครื่องมือ:</div>
+          <div class="topic-tech-label">🛠️ เครื่องมือ / วัสดุ:</div>
           <div class="topic-tech-chips">
             ${techList.map(tc => `<span class="tech-chip">${escapeHtml(tc)}</span>`).join('')}
           </div>
@@ -2347,42 +2406,25 @@ function renderProjectTopics() {
     }
 
     return `
-      <div class="project-topic-card" id="projectTopicCard-${t.id}">
+      <div class="project-topic-card ${isTaken ? 'card-is-taken' : 'card-is-available'}" id="projectTopicCard-${t.id}">
         <div class="topic-card-header">
-          <span class="topic-category-tag">${escapeHtml(t.category)}</span>
-          <span class="topic-status-badge ${isOpen ? 'open' : 'closed'}">
-            ${isOpen ? `🟢 เปิดรับ (${selectedRooms.length}/${t.max_groups_total || 8} ห้อง)` : '🔴 เต็มแล้ว/ปิดรับ'}
-          </span>
+          <span class="topic-category-tag ${catClass}">${escapeHtml(t.category)}</span>
+          ${statusHtml}
         </div>
 
-        <h3 class="topic-card-title">${escapeHtml(t.title)}</h3>
+        <div class="topic-card-title-row">
+          <span class="topic-num-badge">#${t.topic_number || t.id}</span>
+          <h3 class="topic-card-title">${escapeHtml(t.title)}</h3>
+        </div>
+
         <p class="topic-card-desc">${escapeHtml(t.description || 'ไม่มีคำอธิบายเพิ่มเติม')}</p>
 
         ${techChipsHtml}
 
-        <!-- KEY SECTION: Room Status Box (หัวข้อนี้ ม.5 ห้องไหนเลือกไปแล้ว) -->
-        <div class="room-status-box">
-          <div class="room-status-heading">
-            <span>🏷️ ม.5 ห้องที่เลือกหัวข้อนี้ไปแล้ว (${selectedRooms.length} ห้อง):</span>
-          </div>
-          <div class="room-selected-group">
-            ${selectedRoomsHtml}
-          </div>
-
-          <div class="room-available-group">
-            <span class="room-avail-label">ยังว่างสำหรับห้อง:</span>
-            ${availableRoomsHtml}
-          </div>
-        </div>
+        ${roomGroupInfoHtml}
 
         <div class="topic-card-actions">
-          <button type="button" class="btn-select-topic" onclick="openProjectSelectModal(${t.id})" ${!isOpen ? 'disabled style="opacity:0.6; cursor:not-allowed;"' : ''}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>
-            <span>📌 ลงทะเบียนเลือกหัวข้อนี้</span>
-          </button>
-          <button type="button" class="btn-topic-details" onclick="openTopicDetailsModal(${t.id})" title="ดูรายละเอียดกลุ่มและสมาชิก">
-            <span>👥 ดูข้อมูลกลุ่ม</span>
-          </button>
+          ${actionButtonsHtml}
         </div>
       </div>
     `;
@@ -2395,61 +2437,51 @@ function renderProjectMatrix() {
   const targetTables = [table, teacherTable].filter(Boolean);
   if (targetTables.length === 0) return;
 
-  const allM5Rooms = ['ม.5/1', 'ม.5/2', 'ม.5/3', 'ม.5/4', 'ม.5/5', 'ม.5/6', 'ม.5/7', 'ม.5/8'];
-
   let headerHtml = `
     <thead>
       <tr>
-        <th style="width: 40px;">#</th>
-        <th class="col-topic-name">หัวข้อโครงงาน</th>
-        <th style="width: 130px;">หมวดหมู่</th>
-        ${allM5Rooms.map(r => `<th style="width: 75px;">${r}</th>`).join('')}
-        <th style="width: 80px;">รวมที่เลือก</th>
+        <th style="width: 45px; text-align: center;">#</th>
+        <th class="col-topic-name">หัวข้อโครงงาน (100 เรื่อง)</th>
+        <th style="width: 140px;">หมวดหมู่</th>
+        <th style="width: 110px; text-align: center;">สถานะ</th>
+        <th style="width: 90px; text-align: center;">ห้องที่เลือก</th>
+        <th style="width: 80px; text-align: center;">กลุ่มที่</th>
+        <th>รายชื่อสมาชิกในกลุ่ม</th>
       </tr>
     </thead>
   `;
 
   let rowsHtml = '';
   allProjectTopics.forEach((t, idx) => {
-    const selMap = {};
-    (t.selections || []).forEach(s => {
-      selMap[s.classroom] = s;
-    });
+    const isTaken = t.is_taken || (t.selections_count || 0) > 0;
+    const statusBadge = isTaken
+      ? `<span class="badge badge-danger">🔒 เลือกแล้ว</span>`
+      : `<span class="badge badge-success">🟢 ว่าง</span>`;
 
-    const roomCells = allM5Rooms.map(r => {
-      const sel = selMap[r];
-      if (sel) {
-        const titleTooltip = `กลุ่มที่ ${sel.group_number}${sel.group_name ? ' (' + escapeHtml(sel.group_name) + ')' : ''} สมาชิก ${sel.members ? sel.members.length : 0} คน`;
-        return `
-          <td>
-            <span class="matrix-badge-selected" onclick="openTopicDetailsModal(${t.id})" title="${titleTooltip}">
-              ✔ กลุ่ม ${sel.group_number}
-            </span>
-          </td>
-        `;
-      } else {
-        return `<td><span class="matrix-badge-empty">-</span></td>`;
-      }
-    }).join('');
+    const roomText = isTaken ? `<span class="matrix-room-pill">${escapeHtml(t.taken_classroom || '')}</span>` : '-';
+    const groupText = isTaken ? `กลุ่ม ${t.taken_group || ''}` : '-';
 
-    const count = (t.selected_rooms || []).length;
-    const badgeClass = count > 0 ? 'badge-success' : 'badge-secondary';
+    let memNames = '-';
+    if (isTaken && t.taken_members && t.taken_members.length > 0) {
+      memNames = t.taken_members.map(m => {
+        const no = m.student_number ? `(${m.student_number}) ` : '';
+        return `${no}${escapeHtml(m.name)}`;
+      }).join(', ');
+    }
 
     rowsHtml += `
-      <tr>
-        <td style="font-weight: 600; color: var(--slate-500);">${idx + 1}</td>
+      <tr class="${isTaken ? 'matrix-row-taken' : 'matrix-row-available'}">
+        <td style="font-weight: 700; color: var(--slate-500); text-align: center;">${t.topic_number || (idx + 1)}</td>
         <td class="col-topic-name">
-          <a href="javascript:void(0)" onclick="openTopicDetailsModal(${t.id})" style="font-weight: 700; color: var(--school-green-dark); text-decoration: none;">
+          <a href="javascript:void(0)" onclick="${isTaken ? `openTopicDetailsModal(${t.id})` : `openProjectSelectModal(${t.id})`}" style="font-weight: 700; color: var(--school-green-dark); text-decoration: none;">
             ${escapeHtml(t.title)}
           </a>
         </td>
-        <td><span class="topic-category-tag" style="font-size: 0.72rem;">${escapeHtml(t.category)}</span></td>
-        ${roomCells}
-        <td>
-          <span class="badge ${badgeClass}" style="font-weight: 700;">
-            ${count} / 8 ห้อง
-          </span>
-        </td>
+        <td><span class="topic-category-tag ${getTopicCategoryClass(t.category)}" style="font-size: 0.72rem;">${escapeHtml(t.category)}</span></td>
+        <td style="text-align: center;">${statusBadge}</td>
+        <td style="text-align: center; font-weight: 700;">${roomText}</td>
+        <td style="text-align: center;">${groupText}</td>
+        <td style="font-size: 0.82rem; color: var(--slate-600);">${memNames}</td>
       </tr>
     `;
   });
@@ -2472,51 +2504,64 @@ function toggleMatrixView() {
     }
   }
   if (btnText) {
-    btnText.textContent = projectMatrixVisible ? '✕ ปิดตารางสรุป Matrix' : '📊 ดูตารางสรุปภาพรวม Matrix (ห้อง 1 - 8)';
+    btnText.textContent = projectMatrixVisible ? '✕ ปิดตารางสรุป Matrix' : '📊 ตารางสรุปภาพรวม 100 หัวข้อ (ม.5/1 - 8)';
   }
 }
 
 // Student Selection Modal Logic
 function openProjectSelectModal(topicId) {
+  // Populate the topic selector dropdown (#selProjectTopicId)
+  const topicDropdown = document.getElementById('selProjectTopicId');
+  if (topicDropdown) {
+    let optionsHtml = '<option value="">-- กรุณาเลือกหัวข้อโครงงาน (100 หัวข้อ) --</option>';
+    let currentCat = '';
+    
+    allProjectTopics.forEach(t => {
+      if (t.category !== currentCat) {
+        if (currentCat !== '') optionsHtml += '</optgroup>';
+        currentCat = t.category;
+        optionsHtml += `<optgroup label="${escapeHtml(currentCat)}">`;
+      }
+
+      const numStr = `#${t.topic_number || t.id}`;
+      const codeStr = t.code ? `${t.code}: ` : '';
+      const descStr = t.description || t.title;
+
+      if (t.is_taken) {
+        optionsHtml += `<option value="${t.id}" disabled style="color: #b91c1c; background: #fef2f2;">
+          [🔴 ${t.taken_classroom} กลุ่ม ${t.taken_group} เลือกแล้ว - ห้ามซ้ำ] ${numStr} ${codeStr}${descStr}
+        </option>`;
+      } else {
+        optionsHtml += `<option value="${t.id}" style="color: #15803d; font-weight: 500;">
+          [🟢 ว่าง] ${numStr} ${codeStr}${descStr}
+        </option>`;
+      }
+    });
+    if (currentCat !== '') optionsHtml += '</optgroup>';
+    topicDropdown.innerHTML = optionsHtml;
+  }
+
+  // Determine target topic
   let targetTopic = null;
   if (topicId) {
     targetTopic = allProjectTopics.find(t => t.id === topicId);
-  } else if (allProjectTopics.length > 0) {
-    targetTopic = allProjectTopics[0];
+  }
+  if (!targetTopic || targetTopic.is_taken) {
+    targetTopic = allProjectTopics.find(t => !t.is_taken) || allProjectTopics[0];
   }
 
-  if (!targetTopic) {
-    showToast('กรุณารอโหลดข้อมูลหัวข้อโครงงานสักครู่', 'warning');
-    return;
+  if (targetTopic && topicDropdown) {
+    topicDropdown.value = targetTopic.id;
   }
 
-  currentBookingTopicId = targetTopic.id;
-
-  // Fill summary card
-  const titleEl = document.getElementById('selModalTitle');
-  const catEl = document.getElementById('selModalCategory');
-  const descEl = document.getElementById('selModalDesc');
-  const quotaEl = document.getElementById('selModalQuota');
-
-  if (titleEl) titleEl.textContent = targetTopic.title;
-  if (catEl) catEl.textContent = targetTopic.category;
-  if (descEl) descEl.textContent = targetTopic.description || 'ไม่มีคำอธิบายเพิ่มเติม';
-  if (quotaEl) quotaEl.textContent = `โควตา: ห้องละ ${targetTopic.max_groups_per_room || 1} กลุ่ม (รวมไม่เกิน ${targetTopic.max_groups_total || 8} ห้อง)`;
+  currentBookingTopicId = targetTopic ? targetTopic.id : null;
 
   // Reset form
   const form = document.getElementById('projectSelectForm');
   if (form) form.reset();
 
-  const alertBox = document.getElementById('selRoomStatusAlert');
-  if (alertBox) {
-    alertBox.style.display = 'none';
-    alertBox.innerHTML = '';
-  }
-
-  const submitBtn = document.getElementById('btnSubmitProjectSelection');
-  if (submitBtn) {
-    submitBtn.disabled = false;
-    submitBtn.style.opacity = '1';
+  if (topicDropdown && targetTopic) {
+    topicDropdown.value = targetTopic.id;
   }
 
   // Pre-fill classroom if filter active
@@ -2529,11 +2574,86 @@ function openProjectSelectModal(topicId) {
   const membersContainer = document.getElementById('projectMembersListContainer');
   if (membersContainer) {
     membersContainer.innerHTML = '';
-    addProjectMemberRow(); // Add first member row
+    addProjectMemberRow();
+  }
+
+  onModalTopicSelectChange();
+  openModal('modalProjectSelect');
+}
+
+function onModalTopicSelectChange() {
+  const topicDropdown = document.getElementById('selProjectTopicId');
+  const alertBox = document.getElementById('selRoomStatusAlert');
+  const submitBtn = document.getElementById('btnSubmitProjectSelection');
+  const titleEl = document.getElementById('selModalTitle');
+  const catEl = document.getElementById('selModalCategory');
+  const descEl = document.getElementById('selModalDesc');
+  const quotaEl = document.getElementById('selModalQuota');
+  const techEl = document.getElementById('selModalTech');
+
+  const selectedTopicId = parseInt(topicDropdown?.value || '0', 10);
+  currentBookingTopicId = selectedTopicId;
+
+  const targetTopic = allProjectTopics.find(t => t.id === selectedTopicId);
+  if (!targetTopic) {
+    if (titleEl) titleEl.textContent = 'กรุณาเลือกหัวข้อโครงงาน';
+    if (catEl) catEl.textContent = 'ยังไม่ได้เลือก';
+    if (descEl) descEl.textContent = '';
+    if (quotaEl) {
+      quotaEl.className = 'badge badge-secondary';
+      quotaEl.textContent = 'สถานะ: -';
+    }
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.style.opacity = '0.5';
+    }
+    return;
+  }
+
+  if (titleEl) titleEl.textContent = targetTopic.title;
+  if (catEl) catEl.textContent = targetTopic.category;
+  if (descEl) descEl.textContent = targetTopic.description || 'ไม่มีคำอธิบายเพิ่มเติม';
+  if (techEl) {
+    if (targetTopic.technologies) {
+      techEl.style.display = 'block';
+      techEl.innerHTML = `<strong>🛠️ เครื่องมือ / วัสดุ:</strong> ${escapeHtml(targetTopic.technologies)}`;
+    } else {
+      techEl.style.display = 'none';
+    }
+  }
+
+  if (targetTopic.is_taken) {
+    if (quotaEl) {
+      quotaEl.className = 'badge badge-danger';
+      quotaEl.textContent = `สถานะ: 🔴 ถูกเลือกแล้ว (${targetTopic.taken_by})`;
+    }
+    if (alertBox) {
+      alertBox.innerHTML = `
+        <strong>⚠️ ขออภัย หัวข้อนี้ถูกห้อง ${escapeHtml(targetTopic.taken_classroom)} กลุ่มที่ ${targetTopic.taken_group} เลือกไปแล้ว!</strong><br>
+        <span style="font-size:0.85rem;">ตามกติกา 1 หัวข้อสามารถเลือกได้เพียง 1 กลุ่มทั่วทั้งระดับชั้น ม.5 เท่านั้น (ไม่สามารถเลือกซ้ำได้) กรุณาเลือกหัวข้ออื่นที่ยังว่าง</span>
+      `;
+      alertBox.style.display = 'block';
+    }
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.style.opacity = '0.5';
+    }
+  } else {
+    if (quotaEl) {
+      quotaEl.className = 'badge badge-success';
+      quotaEl.textContent = 'สถานะ: 🟢 ว่าง (พร้อมให้เลือกลงทะเบียน)';
+    }
+    if (alertBox) {
+      alertBox.style.display = 'none';
+      alertBox.innerHTML = '';
+    }
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.style.opacity = '1';
+    }
   }
 
   handleProjectRoomSelectChange();
-  openModal('modalProjectSelect');
 }
 
 function handleProjectRoomSelectChange() {
@@ -2545,28 +2665,17 @@ function handleProjectRoomSelectChange() {
   const selectedRoom = roomSelect.value;
   const targetTopic = allProjectTopics.find(t => t.id === currentBookingTopicId);
 
-  if (targetTopic && selectedRoom) {
-    const existingSel = (targetTopic.selections || []).find(s => s.classroom === selectedRoom);
-    if (existingSel) {
-      if (alertBox) {
-        const gName = existingSel.group_name ? ` (${escapeHtml(existingSel.group_name)})` : '';
-        alertBox.innerHTML = `
-          <strong>⚠️ ห้อง ${escapeHtml(selectedRoom)} ได้ลงทะเบียนเลือกหัวข้อนี้ไปแล้ว!</strong><br>
-          โดยกลุ่มที่ ${existingSel.group_number}${gName} (สมาชิก ${existingSel.members ? existingSel.members.length : 0} คน)<br>
-          <span style="font-size:0.85rem;">ตามกติกา แต่ละห้องสามารถเลือกได้ห้องละ 1 กลุ่มเท่านั้น กรุณาเลือกหัวข้อโครงงานอื่นที่ยังว่าง</span>
-        `;
-        alertBox.style.display = 'block';
-      }
-      if (submitBtn) {
-        submitBtn.disabled = true;
-        submitBtn.style.opacity = '0.5';
-      }
-    } else {
-      if (alertBox) alertBox.style.display = 'none';
-      if (submitBtn) {
-        submitBtn.disabled = false;
-        submitBtn.style.opacity = '1';
-      }
+  if (targetTopic && targetTopic.is_taken) {
+    if (alertBox) {
+      alertBox.innerHTML = `
+        <strong>⚠️ ขออภัย หัวข้อนี้ถูกห้อง ${escapeHtml(targetTopic.taken_classroom)} กลุ่มที่ ${targetTopic.taken_group} เลือกไปแล้ว!</strong><br>
+        <span style="font-size:0.85rem;">ตามกติกา 1 หัวข้อสามารถเลือกได้เพียง 1 กลุ่มทั่วระดับชั้น ม.5 เท่านั้น (ไม่สามารถเลือกซ้ำได้) กรุณาเลือกหัวข้ออื่นที่ยังว่าง</span>
+      `;
+      alertBox.style.display = 'block';
+    }
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.style.opacity = '0.5';
     }
   } else {
     if (alertBox) alertBox.style.display = 'none';
@@ -2864,11 +2973,16 @@ function openTopicDetailsModal(topicId) {
     }).join('');
   }
 
+  const isTaken = topic.is_taken || (topic.selections_count || 0) > 0;
+  const statusBadge = isTaken 
+    ? `<span class="badge badge-danger">🔒 เลือกแล้ว: ห้อง ${escapeHtml(topic.taken_classroom || '')} กลุ่ม ${topic.taken_group || ''}</span>`
+    : `<span class="badge badge-success">🟢 ว่าง (พร้อมลงทะเบียนสำหรับทุกห้อง)</span>`;
+
   body.innerHTML = `
     <div class="topic-selection-summary-card mb-3">
       <div class="d-flex justify-between align-center mb-2">
-        <span class="badge-tag-project">${escapeHtml(topic.category)}</span>
-        <span class="badge badge-success">เลือกแล้ว ${selectedRooms.length} / ${topic.max_groups_total || 8} ห้อง</span>
+        <span class="badge-tag-project ${getTopicCategoryClass(topic.category)}">${escapeHtml(topic.category)}</span>
+        ${statusBadge}
       </div>
       <h3 style="margin: 0.25rem 0 0.5rem 0; font-size: 1.25rem; color: var(--school-green-dark);">${escapeHtml(topic.title)}</h3>
       <p style="margin: 0; font-size: 0.9rem; color: var(--slate-700); line-height: 1.5;">${escapeHtml(topic.description || '')}</p>
@@ -2881,34 +2995,32 @@ function openTopicDetailsModal(topicId) {
       
       ${topic.technologies ? `
         <div class="mt-2 text-xs text-muted">
-          <strong>🛠️ เทคโนโลยีที่เกี่ยวข้อง:</strong> ${escapeHtml(topic.technologies)}
+          <strong>🛠️ เทคโนโลยี / เครื่องมือ / วัสดุ:</strong> ${escapeHtml(topic.technologies)}
         </div>
       ` : ''}
     </div>
 
-    <!-- Room Summary Pills in Modal -->
+    <!-- Rule & Availability Notice -->
     <div class="room-status-box mb-3">
       <div class="room-status-heading">
-        <span>🏷️ สถานะแยกตามห้อง ม.5:</span>
+        <span>🏷️ สถานะการเลือกระดับชั้น ม.5:</span>
       </div>
-      <div class="d-flex gap-1 flex-wrap mb-2">
-        <span class="text-xs text-muted" style="min-width: 90px;">ห้องที่เลือกแล้ว:</span>
-        ${selectedRooms.length > 0 
-          ? selectedRooms.map(r => `<span class="badge badge-success">${escapeHtml(r)} 🟢</span>`).join(' ')
-          : '<span class="text-muted text-xs">ยังไม่มี</span>'
-        }
-      </div>
-      <div class="d-flex gap-1 flex-wrap">
-        <span class="text-xs text-muted" style="min-width: 90px;">ยังว่างสำหรับห้อง:</span>
-        ${availableRooms.length > 0 
-          ? availableRooms.map(r => `<span class="room-pill-available">${escapeHtml(r)}</span>`).join(' ')
-          : '<span class="text-danger text-xs">เต็มแล้วทุกห้อง</span>'
-        }
+      <div class="d-flex gap-2 align-center">
+        ${isTaken ? `
+          <div class="text-sm">
+            <span class="badge badge-danger">🔒 ถูกเลือกแล้วโดย ห้อง ${escapeHtml(topic.taken_classroom || '')} กลุ่มที่ ${topic.taken_group || ''}</span>
+            <span class="text-xs text-danger ms-2">ตามกติกา 1 หัวข้อต่อ 1 กลุ่ม ไม่สามารถเลือกซ้ำได้</span>
+          </div>
+        ` : `
+          <div class="text-sm text-success">
+            ✨ <strong>ยังไม่มีห้องใดเลือก</strong> — นักเรียนชั้น ม.5/1 ถึง ม.5/8 สามารถเลือกหัวข้อนี้ได้
+          </div>
+        `}
       </div>
     </div>
 
     <h4 style="margin: 1.25rem 0 0.75rem 0; font-size: 1.05rem; color: var(--slate-800);">
-      👥 รายชื่อกลุ่มและสมาชิกที่ลงทะเบียน (${selections.length} กลุ่ม):
+      👥 ข้อมูลกลุ่มและสมาชิก (${selections.length} กลุ่ม):
     </h4>
     ${groupsHtml}
   `;
@@ -2979,26 +3091,28 @@ function renderTeacherTopicsTable() {
   }
 
   tbody.innerHTML = filtered.map(t => {
-    const selectedRooms = t.selected_rooms || [];
-    const roomsHtml = selectedRooms.length > 0
-      ? selectedRooms.map(r => `<span class="badge badge-success" style="font-size:0.75rem;">${escapeHtml(r)}</span>`).join(' ')
-      : '<span class="text-muted text-xs">ยังไม่มีห้องเลือก</span>';
-
+    const isTaken = t.is_taken || (t.selections_count || 0) > 0;
     const isClosed = t.status === 'closed';
+
+    const statusBadge = isTaken
+      ? `<span class="badge badge-danger">🔒 เลือกแล้ว (${escapeHtml(t.taken_classroom || '')} กลุ่ม ${t.taken_group || ''})</span>`
+      : (isClosed ? '<span class="badge badge-secondary">ปิดรับ</span>' : '<span class="badge badge-success">🟢 ว่าง</span>');
+
+    const roomText = isTaken 
+      ? `<span class="matrix-room-pill">${escapeHtml(t.taken_classroom || '')}</span>`
+      : '<span class="text-muted text-xs">ยังไม่มี</span>';
 
     return `
       <tr>
-        <td style="font-weight: 700; color: var(--slate-500);">${t.id}</td>
-        <td><span class="topic-category-tag" style="font-size: 0.75rem;">${escapeHtml(t.category)}</span></td>
+        <td style="font-weight: 700; color: var(--slate-500); text-align: center;">${t.topic_number || t.id}</td>
+        <td><span class="topic-category-tag ${getTopicCategoryClass(t.category)}" style="font-size: 0.75rem;">${escapeHtml(t.category)}</span></td>
         <td>
           <strong>${escapeHtml(t.title)}</strong>
           ${t.technologies ? `<div class="text-muted text-xs mt-1">🛠️ ${escapeHtml(t.technologies)}</div>` : ''}
         </td>
-        <td>${roomsHtml}</td>
+        <td style="text-align: center;">${roomText}</td>
         <td style="text-align: center;">
-          <span class="badge ${isClosed ? 'badge-danger' : 'badge-success'}">
-            ${isClosed ? 'ปิดรับ' : `เปิดรับ (${selectedRooms.length}/${t.max_groups_total || 8})`}
-          </span>
+          ${statusBadge}
         </td>
         <td style="text-align: center;">
           <div class="d-flex justify-center gap-1">
